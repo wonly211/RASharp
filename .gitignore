@@ -1,0 +1,19 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+
+# Build and publish outputs
+/artifacts/
+/publish/
+
+# Runtime state beside RASharp.exe
+/Config/
+/Cache/
+/everything/
+/RASharp.log
+*.cache.json
+
+# Local icon design iterations; only RASharp.ico and RASharp.png are shipped.
+/src/RASharp.App/Assets/RASharp-icon-*
