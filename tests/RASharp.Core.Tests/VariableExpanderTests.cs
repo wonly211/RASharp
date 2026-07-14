@@ -26,4 +26,14 @@ public sealed class VariableExpanderTests
 
         Assert.Equal("https://example.test/?q=%E4%B8%AD%E6%96%87%20test", result);
     }
+
+    [Fact]
+    public void ExpandDoesNotExposeApplicationDataDirectories()
+    {
+        var expander = new VariableExpander(@"D:\Config");
+
+        var result = expander.Expand(@"%APPDATA%\file.txt|%LOCALAPPDATA%\file.txt");
+
+        Assert.Equal(@"%APPDATA%\file.txt|%LOCALAPPDATA%\file.txt", result);
+    }
 }

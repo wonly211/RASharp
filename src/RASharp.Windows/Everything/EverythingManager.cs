@@ -104,7 +104,9 @@ public sealed partial class EverythingManager(string installationDirectory, Acti
     private async Task InstallReleaseAsync(EverythingRelease release, CancellationToken cancellationToken)
     {
         diagnosticLog?.Invoke($"everything download begin version={release.Version}");
-        var temporaryDirectory = Path.Combine(Path.GetTempPath(), "RASharp", "Everything", Guid.NewGuid().ToString("N"));
+        var temporaryDirectory = Path.Combine(
+            InstallationDirectory,
+            ".update-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryDirectory);
         try
         {
