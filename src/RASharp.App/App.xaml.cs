@@ -48,11 +48,11 @@ public partial class App : System.Windows.Application, IDisposable
     {
         base.OnStartup(e);
         themeService = new SystemThemeService(this);
-        Log("startup " + string.Join(' ', e.Args));
         try
         {
             configDirectory = ResolveConfigDirectory(e.Args);
-            MigrateLegacyConfiguration(configDirectory);
+            MigrateExecutableRootConfiguration(configDirectory);
+            Log("startup " + string.Join(' ', e.Args));
             settingsPath = Path.Combine(configDirectory, "settings.json");
             cachePath = Path.Combine(configDirectory, "everything-cache.json");
             var hasSavedSettings = File.Exists(settingsPath);
@@ -672,19 +672,12 @@ public partial class App : System.Windows.Application, IDisposable
         return Path.Combine(AppContext.BaseDirectory, "Config");
     }
 
-    private static void MigrateLegacyConfiguration(string targetDirectory)
+    private static void MigrateExecutableRootConfiguration(string targetDirectory)
     {
         Directory.CreateDirectory(targetDirectory);
         var targetFullPath = Path.GetFullPath(targetDirectory)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var legacyAppDataDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "RASharp");
-        var legacyDirectories = new[]
-        {
-            AppContext.BaseDirectory,
-            legacyAppDataDirectory,
-        };
+        var legacyDirectories = new[] { AppContext.BaseDirectory };
 
         foreach (var fileName in new[]
                  {
@@ -743,13 +736,13 @@ public partial class App : System.Windows.Application, IDisposable
             """);
     }
 
-    private static void Log(string message)
+    private void Log(string message)
     {
         try
         {
-            var directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "RASharp");
+            var directory = string.IsNullOrWhiteSpace(configDirectory)
+                ? Path.Combine(AppContext.BaseDirectory, "Config")
+                : configDirectory;
             Directory.CreateDirectory(directory);
             var timestamp = DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture);
             File.AppendAllText(Path.Combine(directory, "RASharp.log"), $"{timestamp} {message}{Environment.NewLine}");
