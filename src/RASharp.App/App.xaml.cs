@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Windows;
 using RASharp.Core.Menus;
 using RASharp.Core.Programs;
+using RASharp.Core.Runtime;
 using RASharp.App.Programs;
 using RASharp.App.Settings;
 using RASharp.App.Theming;
@@ -37,6 +38,7 @@ public partial class App : System.Windows.Application, IDisposable
     private SelectedContentService? selectedContentService;
     private List<MenuDocument> documents = [];
     private SelectedContent currentSelection = SelectedContent.Empty;
+    private string applicationDirectory = string.Empty;
     private string configDirectory = string.Empty;
     private string settingsPath = string.Empty;
     private string cachePath = string.Empty;
@@ -58,8 +60,9 @@ public partial class App : System.Windows.Application, IDisposable
         themeService = new SystemThemeService(this);
         try
         {
-            configDirectory = ResolveConfigDirectory(e.Args);
-            MigrateExecutableRootConfiguration(configDirectory);
+            applicationDirectory = PortablePathResolver.GetExecutableDirectory();
+            configDirectory = ResolveConfigDirectory(e.Args, applicationDirectory);
+            MigrateExecutableRootConfiguration(configDirectory, applicationDirectory);
             Log("startup " + string.Join(' ', e.Args));
             settingsPath = Path.Combine(configDirectory, "settings.json");
             cachePath = Path.Combine(configDirectory, "everything-cache.json");
@@ -74,10 +77,10 @@ public partial class App : System.Windows.Application, IDisposable
             }
             CreateTrayIcon();
             everythingManager = new EverythingManager(
-                Path.Combine(AppContext.BaseDirectory, "everything"),
+                Path.Combine(applicationDirectory, "everything"),
                 Log);
             iconCacheService = new IconCacheService(
-                Path.Combine(AppContext.BaseDirectory, "Cache", "RunIcon"));
+                Path.Combine(applicationDirectory, "Cache", "RunIcon"));
             await PrepareEverythingAsync().ConfigureAwait(true);
             await ReloadAsync().ConfigureAwait(true);
             ConfigureConfigWatcher();
@@ -212,7 +215,7 @@ public partial class App : System.Windows.Application, IDisposable
         executor = new MenuEntryExecutor(variableExpander, programResolver);
         selectedContentService = new SelectedContentService(Dispatcher);
         iconCacheService ??= new IconCacheService(
-            Path.Combine(AppContext.BaseDirectory, "Cache", "RunIcon"));
+            Path.Combine(applicationDirectory, "Cache", "RunIcon"));
         popupMenuService = new NativePopupMenuService(
             variableExpander,
             configDirectory,
@@ -523,12 +526,12 @@ public partial class App : System.Windows.Application, IDisposable
             .OrderBy(item => item.DisplayName, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
         iconCacheService ??= new IconCacheService(
-            Path.Combine(AppContext.BaseDirectory, "Cache", "RunIcon"));
+            Path.Combine(applicationDirectory, "Cache", "RunIcon"));
         var window = new SettingsWindow(
             settings,
             configDirectory,
             cachePath,
-            everythingManager?.InstallationDirectory ?? Path.Combine(AppContext.BaseDirectory, "everything"),
+            everythingManager?.InstallationDirectory ?? Path.Combine(applicationDirectory, "everything"),
             everythingManager?.StatusText ?? "管理器未初始化",
             iconCacheService,
             iconItems);
@@ -678,7 +681,7 @@ public partial class App : System.Windows.Application, IDisposable
         return result;
     }
 
-    private static string ResolveConfigDirectory(string[] arguments)
+    private static string ResolveConfigDirectory(string[] arguments, string executableDirectory)
     {
         for (var index = 0; index < arguments.Length; index++)
         {
@@ -700,15 +703,18 @@ public partial class App : System.Windows.Application, IDisposable
             return Path.GetFullPath(environmentPath);
         }
 
-        return Path.Combine(AppContext.BaseDirectory, "Config");
+        return Path.Combine(executableDirectory, "Config");
     }
 
-    private static void MigrateExecutableRootConfiguration(string targetDirectory)
+    private static void MigrateExecutableRootConfiguration(
+        string targetDirectory,
+        string executableDirectory)
     {
         Directory.CreateDirectory(targetDirectory);
         var targetFullPath = Path.GetFullPath(targetDirectory)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var legacyDirectories = new[] { AppContext.BaseDirectory };
+        var legacyDirectories = new[] { executableDirectory, AppContext.BaseDirectory }
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
         foreach (var fileName in new[]
                  {
@@ -772,7 +778,11 @@ public partial class App : System.Windows.Application, IDisposable
         try
         {
             var directory = string.IsNullOrWhiteSpace(configDirectory)
-                ? Path.Combine(AppContext.BaseDirectory, "Config")
+                ? Path.Combine(
+                    string.IsNullOrWhiteSpace(applicationDirectory)
+                        ? PortablePathResolver.GetExecutableDirectory()
+                        : applicationDirectory,
+                    "Config")
                 : configDirectory;
             Directory.CreateDirectory(directory);
             var timestamp = DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture);
