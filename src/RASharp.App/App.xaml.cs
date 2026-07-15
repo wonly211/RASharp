@@ -19,8 +19,10 @@ namespace RASharp.App;
 
 public partial class App : System.Windows.Application, IDisposable
 {
+    private const string SingleInstanceMutexName = @"Local\RASharp.SingleInstance";
     private readonly List<IDisposable> runtimeServices = [];
     private readonly object reloadSync = new();
+    private Mutex? singleInstanceMutex;
     private Forms.NotifyIcon? trayIcon;
     private SystemThemeService? themeService;
     private System.Drawing.Icon? applicationIcon;
@@ -47,6 +49,12 @@ public partial class App : System.Windows.Application, IDisposable
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (!TryAcquireSingleInstance())
+        {
+            Shutdown();
+            return;
+        }
+
         themeService = new SystemThemeService(this);
         try
         {
@@ -127,7 +135,30 @@ public partial class App : System.Windows.Application, IDisposable
         trayIcon = null;
         applicationIcon?.Dispose();
         applicationIcon = null;
+        if (singleInstanceMutex is not null)
+        {
+            singleInstanceMutex.ReleaseMutex();
+            singleInstanceMutex.Dispose();
+            singleInstanceMutex = null;
+        }
+
         GC.SuppressFinalize(this);
+    }
+
+    private bool TryAcquireSingleInstance()
+    {
+        var mutex = new Mutex(
+            initiallyOwned: true,
+            SingleInstanceMutexName,
+            out var createdNew);
+        if (!createdNew)
+        {
+            mutex.Dispose();
+            return false;
+        }
+
+        singleInstanceMutex = mutex;
+        return true;
     }
 
     private async Task ReloadAsync()
