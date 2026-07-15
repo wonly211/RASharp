@@ -50,7 +50,8 @@ public sealed class MenuEntry(
     string? hotKey,
     HotstringSpec? hotstring,
     int sourceLine,
-    string rawText) : MenuElement(sourceLine, rawText)
+    string rawText,
+    bool runAsAdministrator = false) : MenuElement(sourceLine, rawText)
 {
     public string DisplayName { get; } = displayName;
 
@@ -61,6 +62,8 @@ public sealed class MenuEntry(
     public string? HotKey { get; } = hotKey;
 
     public HotstringSpec? Hotstring { get; } = hotstring;
+
+    public bool RunAsAdministrator { get; } = runAsAdministrator;
 
     public string? ResolvedValue { get; set; }
 

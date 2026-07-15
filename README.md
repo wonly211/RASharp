@@ -78,6 +78,7 @@ dotnet publish src/RASharp.App/RASharp.App.csproj -c Release -r win-x64 --self-c
 - 别名后的 Tab 全局热键，例如 `百度\t!b|https://...`。
 - 末尾 `;`/`;;` 的短语。
 - AHK 风格热字符串，例如 `邮箱:*:mail|name@example.com;`。
+- 菜单名称末尾的管理员运行标记，例如 `命令提示符[#]|cmd.exe`；启动时会通过 Windows `runas` 请求管理员权限。
 - `%A_ScriptDir%`、常用 Windows/环境变量、日期时间变量、`%s` 和 `%getZz%`。`%APPDATA%` 与 `%LOCALAPPDATA%` 明确不展开。
 
 当前版本只实现热字符串最核心的立即触发 `*` 与结束字符触发语义；尚未覆盖 AHK 热字符串的全部高级选项。分类选择器已经进入模型，但尚未根据选中文件扩展名隐藏菜单分类。

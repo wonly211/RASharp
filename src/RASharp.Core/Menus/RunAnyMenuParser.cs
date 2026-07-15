@@ -115,9 +115,10 @@ public static partial class RunAnyMenuParser
             }
 
             var (labelText, valueText) = SplitOnce(line, '|');
-            var value = valueText ?? labelText;
             var (label, hotKey) = SplitHotKey(labelText);
-            var (displayName, hotstring) = ParseHotstring(label);
+            var (labelWithoutAdministratorMarker, runAsAdministrator) = ParseRunAsAdministrator(label);
+            var value = valueText ?? labelWithoutAdministratorMarker;
+            var (displayName, hotstring) = ParseHotstring(labelWithoutAdministratorMarker);
             var (kind, normalizedValue) = ParseKind(value);
 
             if (valueText is null)
@@ -132,7 +133,8 @@ public static partial class RunAnyMenuParser
                 hotKey,
                 hotstring,
                 lineNumber,
-                rawLine));
+                rawLine,
+                runAsAdministrator));
         }
 
         return new MenuDocument(sourcePath, menuNumber, root);
@@ -182,6 +184,14 @@ public static partial class RunAnyMenuParser
         var trigger = match.Groups["trigger"].Value;
         var options = match.Groups["options"].Value;
         return (displayName.Length == 0 ? trigger : displayName, new HotstringSpec(trigger, options));
+    }
+
+    private static (string Label, bool RunAsAdministrator) ParseRunAsAdministrator(string label)
+    {
+        var match = AdministratorMarkerRegex().Match(label);
+        return match.Success
+            ? (label.Remove(match.Index, match.Length), true)
+            : (label, false);
     }
 
     private static (string Label, string? HotKey) SplitHotKey(string input)
@@ -250,4 +260,7 @@ public static partial class RunAnyMenuParser
 
     [GeneratedRegex("_:\\d{1,3}$", RegexOptions.CultureInvariant)]
     private static partial Regex TransparencySuffixRegex();
+
+    [GeneratedRegex("\\[#\\](?=(?::[*?A-Za-z0-9]*:[^:]*)?(?:_:\\d{1,3})?$)", RegexOptions.CultureInvariant)]
+    private static partial Regex AdministratorMarkerRegex();
 }

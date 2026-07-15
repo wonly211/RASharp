@@ -85,6 +85,42 @@ public sealed class RunAnyMenuParserTests
     }
 
     [Fact]
+    public void ParseRecognizesAdministratorMarkerAndRemovesItFromDisplayName()
+    {
+        const string content = """
+            -Tools
+            Terminal (Admin)[#]|cmd.exe
+            Search[#]:*:find|search.exe
+            Console[#]_:88|console.exe
+            Regular|notepad.exe
+            powershell.exe[#]
+            """;
+
+        var category = Assert.IsType<MenuCategory>(
+            RunAnyMenuParser.Parse(content, "RunAny.ini", 1).Root.Children[0]);
+
+        var terminal = Assert.IsType<MenuEntry>(category.Children[0]);
+        Assert.Equal("Terminal (Admin)", terminal.DisplayName);
+        Assert.True(terminal.RunAsAdministrator);
+
+        var search = Assert.IsType<MenuEntry>(category.Children[1]);
+        Assert.Equal("Search", search.DisplayName);
+        Assert.Equal("find", search.Hotstring?.Trigger);
+        Assert.True(search.RunAsAdministrator);
+
+        var console = Assert.IsType<MenuEntry>(category.Children[2]);
+        Assert.Equal("Console", console.DisplayName);
+        Assert.True(console.RunAsAdministrator);
+
+        Assert.False(Assert.IsType<MenuEntry>(category.Children[3]).RunAsAdministrator);
+
+        var directCommand = Assert.IsType<MenuEntry>(category.Children[4]);
+        Assert.Equal("powershell", directCommand.DisplayName);
+        Assert.Equal("powershell.exe", directCommand.Value);
+        Assert.True(directCommand.RunAsAdministrator);
+    }
+
+    [Fact]
     public void ParseFileReadsLegacyGbkConfiguration()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);

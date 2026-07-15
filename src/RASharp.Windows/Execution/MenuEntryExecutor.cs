@@ -90,6 +90,7 @@ public sealed class MenuEntryExecutor(
         {
             Arguments = arguments,
             UseShellExecute = true,
+            Verb = entry.RunAsAdministrator ? "runas" : string.Empty,
         };
         var directory = Path.GetDirectoryName(executable);
         if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
