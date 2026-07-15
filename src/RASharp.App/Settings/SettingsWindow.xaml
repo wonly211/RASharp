@@ -116,7 +116,8 @@
                         <TextBlock Text="人工指定程序或文件图标" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <ComboBox x:Name="IconItemComboBox"
                                   DisplayMemberPath="Description"
-                                  FontSize="14" Padding="6" />
+                                  FontSize="14" Padding="6"
+                                  SelectionChanged="IconItemComboBox_SelectionChanged" />
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -127,6 +128,30 @@
                         </Grid>
                         <TextBlock Text="支持 PNG、ICO、JPG、BMP，也可以从 EXE、DLL、文件或文件夹中提取系统图标。"
                                    TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,7,0,14" />
+
+                        <TextBlock Text="图标预览" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                            <Border Width="112" Height="112"
+                                    Background="{DynamicResource ControlBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1" CornerRadius="6">
+                                <Grid Margin="8">
+                                    <Image x:Name="IconPreviewImage"
+                                           Stretch="Uniform"
+                                           SnapsToDevicePixels="True" />
+                                    <TextBlock x:Name="IconPreviewPlaceholderTextBlock"
+                                               Text="暂无预览"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="IconPreviewCaptionTextBlock"
+                                       Margin="14,0,0,0" VerticalAlignment="Center"
+                                       MaxWidth="430" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal">
                             <Button Content="指定所选图标" Click="ApplyIconOverride_Click" />
                             <Button Content="清空并全部重新提取" Margin="10,0,0,0" Click="ClearIconCache_Click" />

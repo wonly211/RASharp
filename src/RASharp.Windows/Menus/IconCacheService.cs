@@ -45,6 +45,34 @@ public sealed partial class IconCacheService
         return Path.Combine(CacheRoot, $"Menu{item.MenuNumber}-{prefix}-{hash}.png");
     }
 
+    public BitmapSource? GetCachedPreview(IconCacheItem item) =>
+        TryLoadImage(GetCachePath(item));
+
+    public static BitmapSource GetSourcePreview(string sourcePath, int iconSize, int iconIndex = -1)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        var absolutePath = Path.GetFullPath(sourcePath);
+        if (!File.Exists(absolutePath) && !Directory.Exists(absolutePath))
+        {
+            throw new FileNotFoundException("指定的图标来源不存在。", absolutePath);
+        }
+
+        var extension = Path.GetExtension(absolutePath);
+        var image = iconIndex >= 0
+            ? ExtractIndexedIcon(absolutePath, iconIndex, iconSize)
+            : extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".ico", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+            ? TryLoadImage(absolutePath)
+            : ExtractShellIcon(
+                absolutePath,
+                Directory.Exists(absolutePath) ? 0x00000010u : 0x00000080u,
+                iconSize);
+        return image ?? throw new InvalidDataException("无法从指定文件读取图标。");
+    }
+
     public BitmapSource? GetOrCreate(
         IconCacheItem item,
         string shellPath,
@@ -70,31 +98,7 @@ public sealed partial class IconCacheService
 
     public void ApplyOverride(IconCacheItem item, string sourcePath, int iconSize, int iconIndex = -1)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
-        var absolutePath = Path.GetFullPath(sourcePath);
-        if (!File.Exists(absolutePath) && !Directory.Exists(absolutePath))
-        {
-            throw new FileNotFoundException("指定的图标来源不存在。", absolutePath);
-        }
-
-        var extension = Path.GetExtension(absolutePath);
-        var image = iconIndex >= 0
-            ? ExtractIndexedIcon(absolutePath, iconIndex, iconSize)
-            : extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".ico", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
-            ? TryLoadImage(absolutePath)
-            : ExtractShellIcon(
-                absolutePath,
-                Directory.Exists(absolutePath) ? 0x00000010u : 0x00000080u,
-                iconSize);
-        if (image is null)
-        {
-            throw new InvalidDataException("无法从指定文件读取图标。");
-        }
-
+        var image = GetSourcePreview(sourcePath, iconSize, iconIndex);
         SaveImage(GetCachePath(item), image);
     }
 
@@ -246,6 +250,15 @@ public sealed partial class IconCacheService
                 BitmapCreateOptions.PreservePixelFormat,
                 BitmapCacheOption.OnLoad);
             var frame = decoder.Frames[0];
+            foreach (var candidate in decoder.Frames)
+            {
+                if ((long)candidate.PixelWidth * candidate.PixelHeight
+                    > (long)frame.PixelWidth * frame.PixelHeight)
+                {
+                    frame = candidate;
+                }
+            }
+
             frame.Freeze();
             return frame;
         }

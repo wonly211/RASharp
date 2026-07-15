@@ -103,6 +103,9 @@ public partial class SettingsWindow : Window
 
                     selectedIconSource = sourcePath;
                     selectedIconIndex = picker.SelectedChoice.Index;
+                    SetIconPreview(
+                        picker.SelectedChoice.Image,
+                        $"待指定图标：资源 #{selectedIconIndex}");
                     IconCacheStatusTextBlock.Text = $"已选择资源 #{selectedIconIndex}，请点击“指定所选图标”。";
                 }
                 catch (Exception exception) when (exception is IOException
@@ -116,6 +119,18 @@ public partial class SettingsWindow : Window
             {
                 selectedIconSource = null;
                 selectedIconIndex = -1;
+                try
+                {
+                    SetIconPreview(
+                        IconCacheService.GetSourcePreview(sourcePath, iconSize: 96),
+                        "待指定图标");
+                }
+                catch (Exception exception) when (exception is IOException
+                    or InvalidOperationException or NotSupportedException)
+                {
+                    ShowValidationError(exception.Message, IconSourceTextBox);
+                    return;
+                }
             }
 
             IconSourceTextBox.Text = sourcePath;
@@ -140,6 +155,19 @@ public partial class SettingsWindow : Window
         var iconIndex = sourcePath.Equals(selectedIconSource, StringComparison.OrdinalIgnoreCase)
             ? selectedIconIndex
             : -1;
+        try
+        {
+            SetIconPreview(
+                IconCacheService.GetSourcePreview(sourcePath, iconSize: 96, iconIndex),
+                iconIndex >= 0 ? $"待指定图标：资源 #{iconIndex}" : "待指定图标");
+        }
+        catch (Exception exception) when (exception is IOException
+            or InvalidOperationException or NotSupportedException)
+        {
+            ShowValidationError(exception.Message, IconSourceTextBox);
+            return;
+        }
+
         IconOverride = new IconOverrideRequest(item, sourcePath, iconIndex);
         IconCacheStatusTextBlock.Text = iconIndex >= 0
             ? $"保存后将用资源 #{iconIndex} 替换：{item.DisplayName}"
@@ -150,6 +178,33 @@ public partial class SettingsWindow : Window
     {
         ClearIconCacheRequested = true;
         IconCacheStatusTextBlock.Text = "保存后将清空全部图标缓存并重新提取。";
+    }
+
+    private void IconItemComboBox_SelectionChanged(
+        object sender,
+        System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (IconItemComboBox.SelectedItem is not IconCacheItem item)
+        {
+            SetIconPreview(null, "请选择菜单项目");
+            return;
+        }
+
+        var preview = iconCacheService.GetCachedPreview(item);
+        SetIconPreview(
+            preview,
+            preview is null
+                ? $"{item.DisplayName} 尚未生成图标缓存"
+                : $"当前图标：{item.DisplayName}");
+    }
+
+    private void SetIconPreview(System.Windows.Media.ImageSource? image, string caption)
+    {
+        IconPreviewImage.Source = image;
+        IconPreviewPlaceholderTextBlock.Visibility = image is null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        IconPreviewCaptionTextBlock.Text = caption;
     }
 
     private void TestEverything_Click(object sender, RoutedEventArgs e)
