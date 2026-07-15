@@ -41,7 +41,7 @@ RASharp 在同一 Windows 会话中只允许运行一个实例。已有实例运
 
 设置默认保存在 RASharp 程序目录下的 `Config\settings.json`，保存后会立即重新载入菜单和输入服务。
 
-菜单图标以 PNG 统一持久化到 RASharp 程序目录下的 `Cache\RunIcon`。升级后会自动迁移并移除旧的 `MenuIcon`、`MenuIcon2` 子目录。菜单加载时优先读取缓存，未命中才调用 Windows `SHGetFileInfo`。设置页“图标”中可清空全部缓存并重新提取，也可从 PNG、ICO、JPG、BMP、EXE、DLL、普通文件或文件夹为指定菜单项设置覆盖图标，并在保存前预览当前缓存图标或待指定图标。选择 EXE 或 DLL 时会枚举其中的全部图标资源，以缩略图和资源索引供人工选择。
+菜单图标以 PNG 统一持久化到 RASharp 程序目录下的 `Cache\RunIcon`。升级后会自动迁移并移除旧的 `MenuIcon`、`MenuIcon2` 子目录。菜单加载时优先读取缓存，未命中才调用 Windows `SHGetFileInfo`。设置页“图标”中可清空全部缓存并重新提取，也可从 PNG、ICO、JPG、BMP、EXE、DLL、普通文件或文件夹为指定菜单项设置覆盖图标，并在保存前预览当前缓存图标或待指定图标。点击“浏览”时，若当前菜单项目指向已存在的程序、文件或目录，文件选择器会默认打开目标所在位置。选择 EXE 或 DLL 时会枚举其中的全部图标资源，以缩略图和资源索引供人工选择。
 
 ### 托管 Everything
 

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using RASharp.Core.Menus;
 using RASharp.Windows.Everything;
 using RASharp.Windows.Input;
 using RASharp.Windows.Menus;
@@ -78,7 +79,15 @@ public partial class SettingsWindow : Window
             Title = "选择图标来源",
             Filter = "图标和程序|*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll|所有文件|*.*",
             CheckFileExists = true,
+            RestoreDirectory = true,
         };
+        var initialDirectory = GetIconBrowseInitialDirectory(
+            IconItemComboBox.SelectedItem as IconCacheItem);
+        if (initialDirectory is not null)
+        {
+            dialog.InitialDirectory = initialDirectory;
+        }
+
         if (dialog.ShowDialog() == Forms.DialogResult.OK)
         {
             var sourcePath = dialog.FileName;
@@ -205,6 +214,24 @@ public partial class SettingsWindow : Window
             ? Visibility.Visible
             : Visibility.Collapsed;
         IconPreviewCaptionTextBlock.Text = caption;
+    }
+
+    private static string? GetIconBrowseInitialDirectory(IconCacheItem? item)
+    {
+        if (item is null)
+        {
+            return null;
+        }
+
+        var targetPath = ParsedCommand.TryParse(item.Target)?.Executable ?? item.Target;
+        if (File.Exists(targetPath))
+        {
+            return Path.GetDirectoryName(Path.GetFullPath(targetPath));
+        }
+
+        return Directory.Exists(targetPath)
+            ? Path.GetFullPath(targetPath)
+            : null;
     }
 
     private void TestEverything_Click(object sender, RoutedEventArgs e)
