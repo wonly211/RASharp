@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         this.configDirectory = configDirectory;
         this.iconCacheService = iconCacheService;
+        VersionTextBlock.Text = $"版本 v{typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3) ?? "未知"}";
         Settings = current.Copy();
         StartWithWindowsCheckBox.IsChecked = Settings.StartWithWindows;
         ThemeModeComboBox.SelectedIndex = (int)Settings.ThemeMode;

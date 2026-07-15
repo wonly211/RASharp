@@ -23,23 +23,26 @@ public sealed record IconChoice(int Index, BitmapSource Image)
     public string Label => $"#{Index}";
 }
 
-public sealed partial class IconCacheService(string cacheRoot)
+public sealed partial class IconCacheService
 {
     private const uint ShellGetIcon = 0x000000100;
     private const uint ShellLargeIcon = 0x000000000;
     private const uint ShellUseFileAttributes = 0x000000010;
 
-    public string CacheRoot { get; } = Path.GetFullPath(cacheRoot);
+    public IconCacheService(string cacheRoot)
+    {
+        CacheRoot = Path.GetFullPath(cacheRoot);
+        Directory.CreateDirectory(CacheRoot);
+        MigrateLegacyDirectories();
+    }
 
-    public string GetMenuDirectory(int menuNumber) => Path.Combine(
-        CacheRoot,
-        menuNumber == 1 ? "MenuIcon" : "MenuIcon2");
+    public string CacheRoot { get; }
 
     public string GetCachePath(IconCacheItem item)
     {
         var prefix = SanitizeFileName(item.DisplayName);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(item.Identity)))[..16];
-        return Path.Combine(GetMenuDirectory(item.MenuNumber), $"{prefix}-{hash}.png");
+        return Path.Combine(CacheRoot, $"Menu{item.MenuNumber}-{prefix}-{hash}.png");
     }
 
     public BitmapSource? GetOrCreate(
@@ -155,8 +158,7 @@ public sealed partial class IconCacheService(string cacheRoot)
             Directory.Delete(CacheRoot, recursive: true);
         }
 
-        Directory.CreateDirectory(GetMenuDirectory(1));
-        Directory.CreateDirectory(GetMenuDirectory(2));
+        Directory.CreateDirectory(CacheRoot);
     }
 
     public static IconCacheItem ForEntry(int menuNumber, MenuEntry entry) => new(
@@ -292,6 +294,48 @@ public sealed partial class IconCacheService(string cacheRoot)
             .ToArray())
             .Trim();
         return normalized.Length == 0 ? "icon" : normalized;
+    }
+
+    private void MigrateLegacyDirectories()
+    {
+        MigrateLegacyDirectory("MenuIcon", 1);
+        MigrateLegacyDirectory("MenuIcon2", 2);
+    }
+
+    private void MigrateLegacyDirectory(string directoryName, int menuNumber)
+    {
+        var legacyDirectory = Path.Combine(CacheRoot, directoryName);
+        if (!Directory.Exists(legacyDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var sourcePath in Directory.EnumerateFiles(legacyDirectory))
+            {
+                var destinationPath = Path.Combine(
+                    CacheRoot,
+                    $"Menu{menuNumber}-{Path.GetFileName(sourcePath)}");
+                if (File.Exists(destinationPath))
+                {
+                    File.Delete(sourcePath);
+                }
+                else
+                {
+                    File.Move(sourcePath, destinationPath);
+                }
+            }
+
+            if (!Directory.EnumerateFileSystemEntries(legacyDirectory).Any())
+            {
+                Directory.Delete(legacyDirectory);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A legacy cache migration failure must not prevent RASharp from starting.
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

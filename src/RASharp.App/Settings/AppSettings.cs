@@ -20,7 +20,7 @@ public sealed class AppSettings
 
     public string Menu2HotKey { get; set; } = string.Empty;
 
-    public string SettingsHotKey { get; set; } = "^!S";
+    public string SettingsHotKey { get; set; } = string.Empty;
 
     public bool EnableProgramCache { get; set; } = true;
 
@@ -28,7 +28,7 @@ public sealed class AppSettings
 
     public bool AutomaticallyUpdateEverything { get; set; } = true;
 
-    public string EverythingHotKey { get; set; } = "^!F";
+    public string EverythingHotKey { get; set; } = string.Empty;
 
     public string EverythingSdkDirectory { get; set; } = string.Empty;
 
@@ -65,7 +65,7 @@ public static class AppSettingsStore
             {
                 MenuHotKey = Environment.GetEnvironmentVariable("RASHARP_MENU_HOTKEY") ?? "``",
                 Menu2HotKey = Environment.GetEnvironmentVariable("RASHARP_MENU2_HOTKEY") ?? string.Empty,
-                SettingsHotKey = Environment.GetEnvironmentVariable("RASHARP_SETTINGS_HOTKEY") ?? "^!S",
+                SettingsHotKey = Environment.GetEnvironmentVariable("RASHARP_SETTINGS_HOTKEY") ?? string.Empty,
             };
         }
 
