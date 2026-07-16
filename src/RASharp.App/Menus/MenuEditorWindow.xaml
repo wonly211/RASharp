@@ -191,7 +191,10 @@
                         <TextBox x:Name="ValueTextBox" Margin="0,6,0,12" AcceptsReturn="True" MinHeight="58" />
 
                         <TextBlock Text="全局热键（与菜单热键不同）" FontWeight="SemiBold" />
-                        <TextBox x:Name="HotKeyTextBox" Margin="0,6,0,12" />
+                        <TextBox x:Name="HotKeyTextBox" Margin="0,6,0,0" />
+                        <TextBlock Text="功能键与字符：Ctrl = ^，Alt = !，Shift = +，Win = #。例如 #S 表示 Win+S，^!Space 表示 Ctrl+Alt+Space。"
+                                   TextWrapping="Wrap" Margin="0,6,0,12"
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
                         <CheckBox x:Name="RunAsAdministratorCheckBox"
                                   Content="以管理员身份运行" Margin="0,2,0,0" />
                         <TextBlock Text="菜单热键用于弹出菜单中的字母导航，输入单个字母或数字即可，保存时自动写成 (&amp;A)；全局热键用于直接从系统触发菜单项。已有 DSL 的其他高级标记会保持不变。"
