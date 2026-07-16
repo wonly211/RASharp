@@ -15,7 +15,9 @@ public enum MenuEditorNodeKind
 public sealed class MenuEditorNode : INotifyPropertyChanged
 {
     private string name = string.Empty;
+    private string menuAccessKey = string.Empty;
     private string value = string.Empty;
+    private string menuAccessKeySpacing = " ";
 
     private MenuEditorNode(MenuEditorNodeKind kind)
     {
@@ -53,6 +55,21 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
             this.value = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(DisplayText));
+        }
+    }
+
+    public string MenuAccessKey
+    {
+        get => menuAccessKey;
+        set
+        {
+            if (menuAccessKey.Equals(value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            menuAccessKey = value;
+            OnPropertyChanged();
         }
     }
 
@@ -145,6 +162,11 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
             MenuSeparator => new MenuEditorNode(MenuEditorNodeKind.Separator),
             _ => throw new ArgumentOutOfRangeException(nameof(element)),
         };
+        if (node.Kind is MenuEditorNodeKind.Category or MenuEditorNodeKind.Entry)
+        {
+            node.SetMenuLabel(node.Name);
+        }
+
         node.OriginalLine = element.RawText;
         return node;
     }
@@ -168,6 +190,11 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
         }
 
         var label = Name.Trim();
+        if (MenuAccessKey.Length > 0)
+        {
+            label += menuAccessKeySpacing + "(&" + MenuAccessKey.Trim() + ')';
+        }
+
         if (Kind == MenuEditorNodeKind.Entry)
         {
             if (RunAsAdministrator)
@@ -216,6 +243,27 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
         return marker >= 0 && int.TryParse(label[(marker + 2)..], out var value)
             ? value
             : null;
+    }
+
+    private void SetMenuLabel(string label)
+    {
+        var suffixStart = label.LastIndexOf("(&", StringComparison.Ordinal);
+        if (suffixStart < 0 || !label.EndsWith(')') || suffixStart + 2 >= label.Length - 1)
+        {
+            Name = label;
+            return;
+        }
+
+        var nameEnd = suffixStart;
+        while (nameEnd > 0 && char.IsWhiteSpace(label[nameEnd - 1]))
+        {
+            nameEnd--;
+        }
+
+        var accessKeyText = label[(suffixStart + 2)..^1];
+        Name = label[..nameEnd];
+        MenuAccessKey = accessKeyText[..1];
+        menuAccessKeySpacing = label[nameEnd..suffixStart];
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>

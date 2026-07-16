@@ -170,17 +170,31 @@
                         <TextBlock x:Name="NodeTypeTextBlock" Text="请选择左侧节点"
                                    FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" />
 
-                        <TextBlock Text="名称" FontWeight="SemiBold" />
-                        <TextBox x:Name="NameTextBox" Margin="0,6,0,12" />
+                        <Grid Margin="0,0,0,12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="116" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="名称" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1" Text="菜单热键" FontWeight="SemiBold" Margin="12,0,0,0" />
+                            <TextBox x:Name="NameTextBox" Grid.Row="1" Margin="0,6,0,0" />
+                            <TextBox x:Name="MenuAccessKeyTextBox" Grid.Row="1" Grid.Column="1"
+                                     Margin="12,6,0,0" MaxLength="1"
+                                     ToolTip="输入一个字母或数字，无需输入 &amp;、括号" />
+                        </Grid>
 
                         <TextBlock Text="命令、网址或内容" FontWeight="SemiBold" />
                         <TextBox x:Name="ValueTextBox" Margin="0,6,0,12" AcceptsReturn="True" MinHeight="58" />
 
-                        <TextBlock Text="全局热键" FontWeight="SemiBold" />
+                        <TextBlock Text="全局热键（与菜单热键不同）" FontWeight="SemiBold" />
                         <TextBox x:Name="HotKeyTextBox" Margin="0,6,0,12" />
                         <CheckBox x:Name="RunAsAdministratorCheckBox"
                                   Content="以管理员身份运行" Margin="0,2,0,0" />
-                        <TextBlock Text="分类只需编辑名称和热键；菜单项可编辑名称、命令和管理员运行。已有 DSL 的其他高级标记会保持不变。"
+                        <TextBlock Text="菜单热键用于弹出菜单中的字母导航，输入单个字母或数字即可，保存时自动写成 (&amp;A)；全局热键用于直接从系统触发菜单项。已有 DSL 的其他高级标记会保持不变。"
                                    TextWrapping="Wrap" Margin="0,12,0,0"
                                    Foreground="{DynamicResource SecondaryTextBrush}" />
 

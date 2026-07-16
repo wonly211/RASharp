@@ -49,15 +49,39 @@ public sealed class MenuEditorModelTests
     }
 
     [Fact]
-    public void DisplayTextContainsOnlyNodeName()
+    public void DisplayTextContainsOnlyNodeNameAndHidesMenuAccessKey()
     {
-        var document = MenuEditorDocument.Parse("-Tools\nNotepad|notepad.exe\n", "RunAny.ini", 1);
+        const string content = "-Tools (&T)\nNotepad(&N)|notepad.exe\n";
+        var document = MenuEditorDocument.Parse(content, "RunAny.ini", 1);
         var category = Assert.Single(document.Children);
         var entry = Assert.Single(category.Children);
 
         Assert.Equal("Tools", category.DisplayText);
+        Assert.Equal("T", category.MenuAccessKey);
         Assert.Equal("Notepad", entry.DisplayText);
+        Assert.Equal("N", entry.MenuAccessKey);
         Assert.DoesNotContain("notepad.exe", entry.DisplayText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("(&", category.DisplayText, StringComparison.Ordinal);
+        Assert.DoesNotContain("(&", entry.DisplayText, StringComparison.Ordinal);
+        Assert.Equal(content, document.Serialize());
+    }
+
+    [Fact]
+    public void EditingMenuAccessKeyRebuildsDslSuffix()
+    {
+        var document = MenuEditorDocument.Parse(
+            "-Tools (&T)\nNotepad(&N)|notepad.exe\n",
+            "RunAny.ini",
+            1);
+        var category = Assert.Single(document.Children);
+        var entry = Assert.Single(category.Children);
+
+        category.MenuAccessKey = "A";
+        document.MarkDirty(category);
+        entry.MenuAccessKey = string.Empty;
+        document.MarkDirty(entry);
+
+        Assert.Equal("-Tools (&A)\nNotepad|notepad.exe\n", document.Serialize());
     }
 
     [Fact]

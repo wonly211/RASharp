@@ -97,6 +97,7 @@ public partial class MenuEditorWindow : Window
             _ => "普通分隔线（|）",
         };
         NameTextBox.Text = node.Name;
+        MenuAccessKeyTextBox.Text = node.MenuAccessKey;
         ValueTextBox.Text = node.Value;
         HotKeyTextBox.Text = node.HotKey;
         RunAsAdministratorCheckBox.IsChecked = node.RunAsAdministrator;
@@ -524,6 +525,13 @@ public partial class MenuEditorWindow : Window
             return ShowValidationError("名称不能为空。", NameTextBox);
         }
 
+        var menuAccessKey = MenuAccessKeyTextBox.Text.Trim().ToUpperInvariant();
+        if (menuAccessKey.Length > 0
+            && (menuAccessKey.Length != 1 || !char.IsLetterOrDigit(menuAccessKey[0])))
+        {
+            return ShowValidationError("菜单热键只能输入一个字母或数字。", MenuAccessKeyTextBox);
+        }
+
         var hotKey = HotKeyTextBox.Text.Trim();
         if (hotKey.Length > 0 && !HotKeyGesture.TryParse(hotKey, out _))
         {
@@ -545,6 +553,7 @@ public partial class MenuEditorWindow : Window
 
         var node = selectedNode;
         var hasChanges = !node.Name.Equals(name, StringComparison.Ordinal)
+            || !node.MenuAccessKey.Equals(menuAccessKey, StringComparison.Ordinal)
             || !node.HotKey.Equals(hotKey, StringComparison.Ordinal)
             || !node.Value.Equals(value, StringComparison.Ordinal)
             || node.RunAsAdministrator != runAsAdministrator;
@@ -556,6 +565,7 @@ public partial class MenuEditorWindow : Window
         _ = ExecuteMutation(() =>
         {
             node.Name = name;
+            node.MenuAccessKey = menuAccessKey;
             node.HotKey = hotKey;
             if (node.Kind == MenuEditorNodeKind.Entry)
             {
@@ -913,7 +923,7 @@ public partial class MenuEditorWindow : Window
     private void ClearEditor()
     {
         NodeTypeTextBlock.Text = "请选择左侧节点";
-        foreach (var textBox in new[] { NameTextBox, ValueTextBox, HotKeyTextBox })
+        foreach (var textBox in new[] { NameTextBox, MenuAccessKeyTextBox, ValueTextBox, HotKeyTextBox })
         {
             textBox.Clear();
         }
@@ -925,6 +935,7 @@ public partial class MenuEditorWindow : Window
     private void SetEditorEnabled(bool commonEnabled, bool entryEnabled)
     {
         NameTextBox.IsEnabled = commonEnabled;
+        MenuAccessKeyTextBox.IsEnabled = commonEnabled;
         HotKeyTextBox.IsEnabled = commonEnabled;
         ValueTextBox.IsEnabled = entryEnabled;
         RunAsAdministratorCheckBox.IsEnabled = entryEnabled;
