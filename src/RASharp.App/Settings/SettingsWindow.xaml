@@ -174,14 +174,10 @@
                         <TextBox x:Name="EverythingDirectoryTextBox" IsReadOnly="True" />
                         <TextBlock x:Name="EverythingManagedStatusTextBlock" Margin="0,8,0,16" Foreground="{DynamicResource SecondaryTextBrush}" />
 
-                        <TextBlock Text="一键 Everything 搜索热键" FontWeight="SemiBold" Margin="0,4,0,6" />
+                        <TextBlock Text="显示 Everything 窗口热键" FontWeight="SemiBold" Margin="0,4,0,6" />
                         <TextBox x:Name="EverythingHotKeyTextBox" />
-                        <TextBlock Text="优先搜索当前选中文字或多选文件；没有选区时搜索剪贴板内容；没有搜索内容时切换 Everything 窗口的激活或最小化。"
+                        <TextBlock Text="按下热键只会还原、激活并显示 Everything 窗口，不会读取选区或剪贴板，也不会自动填入搜索内容。"
                                    TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,7,0,4" />
-                        <CheckBox x:Name="EverythingIncludeFileExtensionCheckBox"
-                                  Content="搜索选中文件时保留文件扩展名" Margin="0,4,0,0" />
-                        <CheckBox x:Name="EverythingSearchFolderContentsCheckBox"
-                                  Content="选中文件夹时搜索文件夹内部" Margin="0,0,0,4" />
                         <TextBlock Text="热键格式：^ 表示 Ctrl，! 表示 Alt，+ 表示 Shift，# 表示 Win。例如 #S 表示 Win+S，^!Space 表示 Ctrl+Alt+Space。留空表示不注册对应热键。"
                                    TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,7,0,16" />
 

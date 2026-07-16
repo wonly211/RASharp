@@ -73,14 +73,14 @@ public sealed partial class EverythingManager(string installationDirectory, Acti
         await WaitForDatabaseAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public void ShowWindow(string? searchQuery = null)
+    public void ShowWindow()
     {
         if (!IsInstalled)
         {
             throw new InvalidOperationException("Everything 尚未安装。");
         }
 
-        if (string.IsNullOrWhiteSpace(searchQuery) && TryToggleExistingWindow())
+        if (TryShowExistingWindow())
         {
             return;
         }
@@ -91,16 +91,10 @@ public sealed partial class EverythingManager(string installationDirectory, Acti
             WorkingDirectory = InstallationDirectory,
         };
         startInfo.ArgumentList.Add("-nonewwindow");
-        if (!string.IsNullOrWhiteSpace(searchQuery))
-        {
-            startInfo.ArgumentList.Add("-search");
-            startInfo.ArgumentList.Add(searchQuery);
-        }
-
         _ = Process.Start(startInfo);
     }
 
-    private static bool TryToggleExistingWindow()
+    private static bool TryShowExistingWindow()
     {
         var window = NativeMethods.FindWindow("EVERYTHING", null);
         if (window == 0)
@@ -108,18 +102,11 @@ public sealed partial class EverythingManager(string installationDirectory, Acti
             return false;
         }
 
-        if (!NativeMethods.IsIconic(window) && NativeMethods.GetForegroundWindow() == window)
-        {
-            _ = NativeMethods.ShowWindow(window, ShowWindowMinimize);
-            return true;
-        }
-
         _ = NativeMethods.ShowWindow(window, ShowWindowRestore);
         _ = NativeMethods.SetForegroundWindow(window);
         return true;
     }
 
-    private const int ShowWindowMinimize = 6;
     private const int ShowWindowRestore = 9;
 
     public async Task ConfigureServiceAsync(CancellationToken cancellationToken = default)
@@ -431,13 +418,6 @@ public sealed partial class EverythingManager(string installationDirectory, Acti
     {
         [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
         internal static partial nint FindWindow(string className, string? windowName);
-
-        [LibraryImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool IsIconic(nint window);
-
-        [LibraryImport("user32.dll")]
-        internal static partial nint GetForegroundWindow();
 
         [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

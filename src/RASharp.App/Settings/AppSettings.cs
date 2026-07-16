@@ -30,10 +30,6 @@ public sealed class AppSettings
 
     public string EverythingHotKey { get; set; } = string.Empty;
 
-    public bool EverythingIncludeFileExtension { get; set; } = true;
-
-    public bool EverythingSearchFolderContents { get; set; } = true;
-
     public string EverythingSdkDirectory { get; set; } = string.Empty;
 
     public AppThemeMode ThemeMode { get; set; } = AppThemeMode.System;
@@ -48,8 +44,6 @@ public sealed class AppSettings
         EnableEverything = EnableEverything,
         AutomaticallyUpdateEverything = AutomaticallyUpdateEverything,
         EverythingHotKey = EverythingHotKey,
-        EverythingIncludeFileExtension = EverythingIncludeFileExtension,
-        EverythingSearchFolderContents = EverythingSearchFolderContents,
         EverythingSdkDirectory = EverythingSdkDirectory,
         ThemeMode = ThemeMode,
     };

@@ -75,8 +75,14 @@
                 <Border Style="{StaticResource DragPaletteStyle}" Tag="Separator"
                         PreviewMouseLeftButtonDown="Palette_PreviewMouseLeftButtonDown"
                         PreviewMouseMove="Palette_PreviewMouseMove"
-                        ToolTip="拖到需要分隔的位置">
-                    <TextBlock Text="添加分隔线" />
+                        ToolTip="添加普通菜单分隔线 |">
+                    <TextBlock Text="添加普通分隔线（|）" />
+                </Border>
+                <Border Style="{StaticResource DragPaletteStyle}" Tag="LevelSeparator"
+                        PreviewMouseLeftButtonDown="Palette_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="Palette_PreviewMouseMove"
+                        ToolTip="添加层级复位线；一级菜单中写为 -，之后的项目返回一级菜单">
+                    <TextBlock Text="添加层级复位线（-）" />
                 </Border>
             </StackPanel>
         </Grid>
@@ -112,7 +118,8 @@
                                 <MenuItem Header="添加">
                                     <MenuItem Header="添加分类" Tag="Category" Click="ContextAdd_Click" />
                                     <MenuItem Header="添加应用（菜单项）" Tag="Entry" Click="ContextAdd_Click" />
-                                    <MenuItem Header="添加分隔线" Tag="Separator" Click="ContextAdd_Click" />
+                                    <MenuItem Header="添加普通分隔线（|）" Tag="Separator" Click="ContextAdd_Click" />
+                                    <MenuItem Header="添加层级复位线（-）" Tag="LevelSeparator" Click="ContextAdd_Click" />
                                 </MenuItem>
                                 <Separator />
                                 <MenuItem x:Name="ContextMoveTopMenuItem" Header="置顶" InputGestureText="Ctrl+Home" Click="ContextMoveTop_Click" />

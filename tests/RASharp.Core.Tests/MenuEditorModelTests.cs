@@ -145,6 +145,60 @@ public sealed class MenuEditorModelTests
     }
 
     [Fact]
+    public void LevelSeparatorReturnsFollowingEntriesToTheParentMenu()
+    {
+        const string content = "-Category\nChild app|child.exe\n-\nRoot app|root.exe\n";
+
+        var document = MenuEditorDocument.Parse(content, "RunAny.ini", 1);
+
+        Assert.Equal(3, document.Children.Count);
+        Assert.Equal(MenuEditorNodeKind.Category, document.Children[0].Kind);
+        Assert.Equal(MenuEditorNodeKind.LevelSeparator, document.Children[1].Kind);
+        Assert.Equal("──────── 返回当前菜单层级（-）────────", document.Children[1].DisplayText);
+        Assert.Equal(MenuEditorNodeKind.Entry, document.Children[2].Kind);
+        Assert.Null(document.Children[2].Parent);
+        Assert.Equal(content, document.Serialize());
+    }
+
+    [Fact]
+    public void AddedLevelSeparatorAllowsApplicationsAfterCategoriesAtTheSameLevel()
+    {
+        var document = MenuEditorDocument.Parse(
+            "-Category\nChild app|child.exe\n",
+            "RunAny.ini",
+            1);
+        var category = Assert.Single(document.Children);
+        var levelSeparator = MenuEditorNode.CreateLevelSeparator();
+        var rootEntry = MenuEditorNode.CreateEntry("Root app", "root.exe");
+
+        document.Add(levelSeparator, index: int.MaxValue);
+        document.Add(rootEntry, index: int.MaxValue);
+
+        Assert.Equal(
+            "-Category\nChild app|child.exe\n-\nRoot app|root.exe\n",
+            document.Serialize());
+        var reparsed = MenuEditorDocument.Parse(document.Serialize(), "RunAny.ini", 1);
+        Assert.Equal(
+            [MenuEditorNodeKind.Category, MenuEditorNodeKind.LevelSeparator, MenuEditorNodeKind.Entry],
+            reparsed.Children.Select(node => node.Kind));
+    }
+
+    [Fact]
+    public void MovingLevelSeparatorRewritesItsDslDepth()
+    {
+        var document = MenuEditorDocument.Parse(
+            "-Parent\n--Child\nChild app|child.exe\n--\nParent app|parent.exe\n",
+            "RunAny.ini",
+            1);
+        var parent = Assert.Single(document.Children);
+        var levelSeparator = parent.Children[1];
+
+        Assert.Equal(MenuEditorNodeKind.LevelSeparator, levelSeparator.Kind);
+        Assert.True(document.MoveTo(levelSeparator, null, int.MaxValue));
+        Assert.Contains("\n-\n", document.Serialize(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SnapshotRestoresTreeContentAndDirtyState()
     {
         var document = MenuEditorDocument.Parse("-Tools\nFirst|first.exe\n", "RunAny.ini", 1);

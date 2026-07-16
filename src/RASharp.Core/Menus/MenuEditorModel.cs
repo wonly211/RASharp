@@ -9,6 +9,7 @@ public enum MenuEditorNodeKind
     Category,
     Entry,
     Separator,
+    LevelSeparator,
 }
 
 public sealed class MenuEditorNode : INotifyPropertyChanged
@@ -85,7 +86,8 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
     {
         MenuEditorNodeKind.Category => Name,
         MenuEditorNodeKind.Entry => Name,
-        _ => "──────── 分隔线 ────────",
+        MenuEditorNodeKind.LevelSeparator => "──────── 返回当前菜单层级（-）────────",
+        _ => "──────── 普通分隔线（|）────────",
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -104,6 +106,11 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
     };
 
     public static MenuEditorNode CreateSeparator() => new(MenuEditorNodeKind.Separator)
+    {
+        IsModified = true,
+    };
+
+    public static MenuEditorNode CreateLevelSeparator() => new(MenuEditorNodeKind.LevelSeparator)
     {
         IsModified = true,
     };
@@ -130,6 +137,11 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
                 RunAsAdministrator = entry.RunAsAdministrator,
                 Transparency = ParseTransparency(entry.RawText),
             },
+            MenuSeparator separator when separator.RawText.Trim().StartsWith('-') =>
+                new MenuEditorNode(MenuEditorNodeKind.LevelSeparator)
+                {
+                    OriginalDepth = separator.Depth,
+                },
             MenuSeparator => new MenuEditorNode(MenuEditorNodeKind.Separator),
             _ => throw new ArgumentOutOfRangeException(nameof(element)),
         };
@@ -139,7 +151,8 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
 
     internal string BuildLine(int depth)
     {
-        if (!IsModified && (Kind != MenuEditorNodeKind.Category || OriginalDepth == depth))
+        var depthSensitive = Kind is MenuEditorNodeKind.Category or MenuEditorNodeKind.LevelSeparator;
+        if (!IsModified && (!depthSensitive || OriginalDepth == depth))
         {
             return OriginalLine;
         }
@@ -147,6 +160,11 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
         if (Kind == MenuEditorNodeKind.Separator)
         {
             return "|";
+        }
+
+        if (Kind == MenuEditorNodeKind.LevelSeparator)
+        {
+            return new string('-', Math.Max(1, depth));
         }
 
         var label = Name.Trim();
@@ -272,11 +290,10 @@ public sealed class MenuEditorDocument
 
         var target = parent?.Children ?? Children;
         node.Parent = parent;
-        var insertionIndex = Math.Clamp(index ?? target.Count, 0, target.Count);
-        var firstCategoryIndex = GetFirstCategoryIndex(target);
-        insertionIndex = node.Kind == MenuEditorNodeKind.Category
-            ? Math.Max(insertionIndex, firstCategoryIndex)
-            : Math.Min(insertionIndex, firstCategoryIndex);
+        var insertionIndex = NormalizeInsertionIndex(
+            target,
+            node.Kind,
+            index ?? target.Count);
 
         target.Insert(insertionIndex, node);
         IsDirty = true;
@@ -314,19 +331,8 @@ public sealed class MenuEditorDocument
             return false;
         }
 
-        var minimumIndex = 0;
-        var maximumIndex = siblings.Count - 1;
-        var entryCount = siblings.Count(item => item.Kind != MenuEditorNodeKind.Category);
-        if (node.Kind == MenuEditorNodeKind.Category)
-        {
-            minimumIndex = entryCount;
-        }
-        else
-        {
-            maximumIndex = entryCount - 1;
-        }
-
-        var destination = Math.Clamp(destinationIndex, minimumIndex, maximumIndex);
+        var remaining = siblings.Where(item => !ReferenceEquals(item, node)).ToList();
+        var destination = NormalizeInsertionIndex(remaining, node.Kind, destinationIndex);
         if (destination == index)
         {
             return false;
@@ -336,6 +342,48 @@ public sealed class MenuEditorDocument
         siblings.Insert(destination, node);
         IsDirty = true;
         return true;
+    }
+
+    public bool CanMoveWithinSiblings(MenuEditorNode node, int destinationIndex)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var siblings = node.Parent?.Children ?? Children;
+        var index = siblings.IndexOf(node);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        var remaining = siblings.Where(item => !ReferenceEquals(item, node)).ToList();
+        return NormalizeInsertionIndex(remaining, node.Kind, destinationIndex) != index;
+    }
+
+    public int GetNormalizedInsertionIndex(
+        MenuEditorNodeKind kind,
+        MenuEditorNode? parent,
+        int requestedIndex,
+        MenuEditorNode? movingNode = null)
+    {
+        if (parent is not null && parent.Kind != MenuEditorNodeKind.Category)
+        {
+            throw new ArgumentException("The target parent must be a category.", nameof(parent));
+        }
+
+        var siblings = parent?.Children ?? Children;
+        var adjustedIndex = Math.Clamp(requestedIndex, 0, siblings.Count);
+        if (movingNode is not null && ReferenceEquals(movingNode.Parent, parent))
+        {
+            var oldIndex = siblings.IndexOf(movingNode);
+            if (oldIndex >= 0 && adjustedIndex > oldIndex)
+            {
+                adjustedIndex--;
+            }
+        }
+
+        var remaining = movingNode is null
+            ? siblings
+            : siblings.Where(item => !ReferenceEquals(item, movingNode)).ToList();
+        return NormalizeInsertionIndex(remaining, kind, adjustedIndex);
     }
 
     public bool MoveTo(MenuEditorNode node, MenuEditorNode? newParent, int index)
@@ -362,18 +410,8 @@ public sealed class MenuEditorDocument
         }
 
         var newSiblings = newParent?.Children ?? Children;
-        var insertionIndex = Math.Clamp(index, 0, newSiblings.Count);
-        if (ReferenceEquals(oldSiblings, newSiblings) && insertionIndex > oldIndex)
-        {
-            insertionIndex--;
-        }
-
+        var insertionIndex = GetNormalizedInsertionIndex(node.Kind, newParent, index, node);
         oldSiblings.RemoveAt(oldIndex);
-        var firstCategoryIndex = GetFirstCategoryIndex(newSiblings);
-        insertionIndex = node.Kind == MenuEditorNodeKind.Category
-            ? Math.Max(insertionIndex, firstCategoryIndex)
-            : Math.Min(insertionIndex, firstCategoryIndex);
-
         insertionIndex = Math.Clamp(insertionIndex, 0, newSiblings.Count);
         if (ReferenceEquals(oldSiblings, newSiblings) && insertionIndex == oldIndex)
         {
@@ -469,7 +507,9 @@ public sealed class MenuEditorDocument
             lines.Add(leadingLine);
         }
 
-        var depth = node.Kind == MenuEditorNodeKind.Category ? parentDepth + 1 : parentDepth;
+        var depth = node.Kind is MenuEditorNodeKind.Category or MenuEditorNodeKind.LevelSeparator
+            ? parentDepth + 1
+            : parentDepth;
         lines.Add(node.BuildLine(depth));
         foreach (var child in node.Children)
         {
@@ -477,16 +517,48 @@ public sealed class MenuEditorDocument
         }
     }
 
-    private static int GetFirstCategoryIndex(IList<MenuEditorNode> nodes)
+    private static int NormalizeInsertionIndex(
+        IList<MenuEditorNode> nodes,
+        MenuEditorNodeKind kind,
+        int requestedIndex)
     {
-        for (var index = 0; index < nodes.Count; index++)
+        var insertionIndex = Math.Clamp(requestedIndex, 0, nodes.Count);
+        if (kind == MenuEditorNodeKind.LevelSeparator)
         {
-            if (nodes[index].Kind == MenuEditorNodeKind.Category)
+            return insertionIndex;
+        }
+
+        var segmentStart = 0;
+        for (var index = 0; index < insertionIndex; index++)
+        {
+            if (nodes[index].Kind == MenuEditorNodeKind.LevelSeparator)
             {
-                return index;
+                segmentStart = index + 1;
             }
         }
 
-        return nodes.Count;
+        var segmentEnd = nodes.Count;
+        for (var index = insertionIndex; index < nodes.Count; index++)
+        {
+            if (nodes[index].Kind == MenuEditorNodeKind.LevelSeparator)
+            {
+                segmentEnd = index;
+                break;
+            }
+        }
+
+        var firstCategoryIndex = segmentEnd;
+        for (var index = segmentStart; index < segmentEnd; index++)
+        {
+            if (nodes[index].Kind == MenuEditorNodeKind.Category)
+            {
+                firstCategoryIndex = index;
+                break;
+            }
+        }
+
+        return kind == MenuEditorNodeKind.Category
+            ? Math.Clamp(insertionIndex, firstCategoryIndex, segmentEnd)
+            : Math.Clamp(insertionIndex, segmentStart, firstCategoryIndex);
     }
 }

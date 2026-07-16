@@ -3,7 +3,6 @@ using System.IO;
 using System.Net.Http;
 using System.Windows;
 using RASharp.App.About;
-using RASharp.Core.Everything;
 using RASharp.Core.Menus;
 using RASharp.Core.Programs;
 using RASharp.Core.Runtime;
@@ -265,7 +264,7 @@ public partial class App : System.Windows.Application, IDisposable
         if (settings.EnableEverything
             && everythingManager?.IsInstalled == true
             && !string.IsNullOrWhiteSpace(settings.EverythingHotKey)
-            && !globalHotKeys.Register(settings.EverythingHotKey, ShowEverythingSearchAsync))
+            && !globalHotKeys.Register(settings.EverythingHotKey, ShowEverythingAsync))
         {
             ShowBalloon(
                 "热键注册失败",
@@ -494,7 +493,7 @@ public partial class App : System.Windows.Application, IDisposable
         return (System.Drawing.Icon)icon.Clone();
     }
 
-    private async Task ShowEverythingSearchAsync()
+    private async Task ShowEverythingAsync()
     {
         if (everythingManager?.IsInstalled != true)
         {
@@ -503,17 +502,8 @@ public partial class App : System.Windows.Application, IDisposable
 
         try
         {
-            var selection = selectedContentService is null
-                ? SelectedContent.Empty
-                : await selectedContentService.CaptureAsync(
-                    useClipboardFallback: true).ConfigureAwait(true);
-            var query = EverythingSearchQueryBuilder.Build(
-                selection.Text,
-                selection.Files,
-                settings.EverythingIncludeFileExtension,
-                settings.EverythingSearchFolderContents);
-            everythingManager?.ShowWindow(query);
-            Log(query.Length == 0 ? "everything toggled" : $"everything one-key search length={query.Length}");
+            everythingManager?.ShowWindow();
+            Log("everything window shown");
         }
         catch (Exception exception) when (exception is InvalidOperationException
             or System.ComponentModel.Win32Exception or IOException)
