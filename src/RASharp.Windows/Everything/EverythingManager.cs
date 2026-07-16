@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
@@ -72,19 +73,54 @@ public sealed partial class EverythingManager(string installationDirectory, Acti
         await WaitForDatabaseAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public void ShowWindow()
+    public void ShowWindow(string? searchQuery = null)
     {
         if (!IsInstalled)
         {
             throw new InvalidOperationException("Everything 尚未安装。");
         }
 
-        _ = Process.Start(new ProcessStartInfo(ExecutablePath, "-nonewwindow")
+        if (string.IsNullOrWhiteSpace(searchQuery) && TryToggleExistingWindow())
+        {
+            return;
+        }
+
+        var startInfo = new ProcessStartInfo(ExecutablePath)
         {
             UseShellExecute = true,
             WorkingDirectory = InstallationDirectory,
-        });
+        };
+        startInfo.ArgumentList.Add("-nonewwindow");
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            startInfo.ArgumentList.Add("-search");
+            startInfo.ArgumentList.Add(searchQuery);
+        }
+
+        _ = Process.Start(startInfo);
     }
+
+    private static bool TryToggleExistingWindow()
+    {
+        var window = NativeMethods.FindWindow("EVERYTHING", null);
+        if (window == 0)
+        {
+            return false;
+        }
+
+        if (!NativeMethods.IsIconic(window) && NativeMethods.GetForegroundWindow() == window)
+        {
+            _ = NativeMethods.ShowWindow(window, ShowWindowMinimize);
+            return true;
+        }
+
+        _ = NativeMethods.ShowWindow(window, ShowWindowRestore);
+        _ = NativeMethods.SetForegroundWindow(window);
+        return true;
+    }
+
+    private const int ShowWindowMinimize = 6;
+    private const int ShowWindowRestore = 9;
 
     public async Task ConfigureServiceAsync(CancellationToken cancellationToken = default)
     {
@@ -390,4 +426,25 @@ public sealed partial class EverythingManager(string installationDirectory, Acti
     private static partial Regex StableReleaseRegex();
 
     private sealed record EverythingRelease(Version Version, Uri DownloadUri, string FileName);
+
+    private static partial class NativeMethods
+    {
+        [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial nint FindWindow(string className, string? windowName);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool IsIconic(nint window);
+
+        [LibraryImport("user32.dll")]
+        internal static partial nint GetForegroundWindow();
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool ShowWindow(nint window, int command);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool SetForegroundWindow(nint window);
+    }
 }

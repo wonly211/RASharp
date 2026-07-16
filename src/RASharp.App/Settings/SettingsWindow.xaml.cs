@@ -38,6 +38,8 @@ public partial class SettingsWindow : Window
         EnableEverythingCheckBox.IsChecked = Settings.EnableEverything;
         AutoUpdateEverythingCheckBox.IsChecked = Settings.AutomaticallyUpdateEverything;
         EverythingHotKeyTextBox.Text = Settings.EverythingHotKey;
+        EverythingIncludeFileExtensionCheckBox.IsChecked = Settings.EverythingIncludeFileExtension;
+        EverythingSearchFolderContentsCheckBox.IsChecked = Settings.EverythingSearchFolderContents;
         EverythingDirectoryTextBox.Text = everythingDirectory;
         EverythingManagedStatusTextBlock.Text = everythingStatus;
         ConfigDirectoryTextBox.Text = configDirectory;
@@ -305,6 +307,8 @@ public partial class SettingsWindow : Window
         Settings.EnableEverything = EnableEverythingCheckBox.IsChecked == true;
         Settings.AutomaticallyUpdateEverything = AutoUpdateEverythingCheckBox.IsChecked == true;
         Settings.EverythingHotKey = everythingHotKey;
+        Settings.EverythingIncludeFileExtension = EverythingIncludeFileExtensionCheckBox.IsChecked == true;
+        Settings.EverythingSearchFolderContents = EverythingSearchFolderContentsCheckBox.IsChecked == true;
         Settings.EverythingSdkDirectory = string.Empty;
         DialogResult = true;
     }

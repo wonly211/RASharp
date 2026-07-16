@@ -3,9 +3,11 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Windows;
+using RASharp.Core.Everything;
 using RASharp.Core.Menus;
 using RASharp.Core.Programs;
 using RASharp.Core.Runtime;
+using RASharp.App.Menus;
 using RASharp.App.Programs;
 using RASharp.App.Settings;
 using RASharp.App.Theming;
@@ -29,6 +31,7 @@ public partial class App : System.Windows.Application, IDisposable
     private System.Drawing.Icon? applicationIcon;
     private Forms.ToolStripMenuItem? menu2TrayItem;
     private SettingsWindow? activeSettingsWindow;
+    private MenuEditorWindow? activeMenuEditorWindow;
     private NativePopupMenuService? popupMenuService;
     private CachedProgramResolver? programResolver;
     private EverythingSearch? everythingSearch;
@@ -261,11 +264,7 @@ public partial class App : System.Windows.Application, IDisposable
         if (settings.EnableEverything
             && everythingManager?.IsInstalled == true
             && !string.IsNullOrWhiteSpace(settings.EverythingHotKey)
-            && !globalHotKeys.Register(settings.EverythingHotKey, () =>
-            {
-                everythingManager.ShowWindow();
-                return Task.CompletedTask;
-            }))
+            && !globalHotKeys.Register(settings.EverythingHotKey, ShowEverythingSearchAsync))
         {
             ShowBalloon(
                 "热键注册失败",
@@ -463,10 +462,10 @@ public partial class App : System.Windows.Application, IDisposable
         menu2TrayItem = new Forms.ToolStripMenuItem("显示菜单2") { Visible = false };
         menu2TrayItem.Click += async (_, _) => await ShowMenuAsync(1).ConfigureAwait(true);
         menu.Items.Add(menu2TrayItem);
-        menu.Items.Add("显示 Everything", null, async (_, _) => await ShowEverythingAsync().ConfigureAwait(true));
         menu.Items.Add("重新加载", null, async (_, _) => await ReloadSafelyAsync().ConfigureAwait(true));
+        menu.Items.Add("编辑菜单", null, (_, _) => ShowMenuEditor());
         menu.Items.Add("设置…", null, async (_, _) => await ShowSettingsAsync().ConfigureAwait(true));
-        menu.Items.Add("打开 RunAny.ini", null, (_, _) => OpenConfiguration());
+        menu.Items.Add("编辑菜单文件", null, (_, _) => OpenConfigurationFile());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) => Shutdown());
 
@@ -494,7 +493,7 @@ public partial class App : System.Windows.Application, IDisposable
         return (System.Drawing.Icon)icon.Clone();
     }
 
-    private async Task ShowEverythingAsync()
+    private async Task ShowEverythingSearchAsync()
     {
         if (everythingManager?.IsInstalled != true)
         {
@@ -503,9 +502,20 @@ public partial class App : System.Windows.Application, IDisposable
 
         try
         {
-            everythingManager?.ShowWindow();
+            var selection = selectedContentService is null
+                ? SelectedContent.Empty
+                : await selectedContentService.CaptureAsync(
+                    useClipboardFallback: true).ConfigureAwait(true);
+            var query = EverythingSearchQueryBuilder.Build(
+                selection.Text,
+                selection.Files,
+                settings.EverythingIncludeFileExtension,
+                settings.EverythingSearchFolderContents);
+            everythingManager?.ShowWindow(query);
+            Log(query.Length == 0 ? "everything toggled" : $"everything one-key search length={query.Length}");
         }
-        catch (InvalidOperationException exception)
+        catch (Exception exception) when (exception is InvalidOperationException
+            or System.ComponentModel.Win32Exception or IOException)
         {
             ShowBalloon("Everything 不可用", exception.Message, Forms.ToolTipIcon.Warning);
         }
@@ -634,7 +644,27 @@ public partial class App : System.Windows.Application, IDisposable
         }
     }
 
-    private void OpenConfiguration()
+    private void ShowMenuEditor()
+    {
+        if (activeMenuEditorWindow is not null)
+        {
+            if (activeMenuEditorWindow.WindowState == WindowState.Minimized)
+            {
+                activeMenuEditorWindow.WindowState = WindowState.Normal;
+            }
+
+            _ = activeMenuEditorWindow.Activate();
+            return;
+        }
+
+        var window = new MenuEditorWindow(configDirectory);
+        activeMenuEditorWindow = window;
+        window.Saved += async (_, _) => await ReloadSafelyAsync().ConfigureAwait(true);
+        window.Closed += (_, _) => activeMenuEditorWindow = null;
+        window.Show();
+    }
+
+    private void OpenConfigurationFile()
     {
         var path = Path.Combine(configDirectory, "RunAny.ini");
         _ = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });

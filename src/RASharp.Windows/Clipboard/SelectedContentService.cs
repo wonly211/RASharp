@@ -8,16 +8,25 @@ namespace RASharp.Windows.Clipboard;
 
 public sealed partial class SelectedContentService(Dispatcher dispatcher)
 {
-    public Task<SelectedContent> CaptureAsync(TimeSpan? timeout = null) =>
-        dispatcher.InvokeAsync(() => CaptureOnDispatcherAsync(timeout ?? TimeSpan.FromMilliseconds(250)))
+    public Task<SelectedContent> CaptureAsync(
+        TimeSpan? timeout = null,
+        bool useClipboardFallback = false) =>
+        dispatcher.InvokeAsync(() => CaptureOnDispatcherAsync(
+                timeout ?? TimeSpan.FromMilliseconds(250),
+                useClipboardFallback))
             .Task
             .Unwrap();
 
-    private static async Task<SelectedContent> CaptureOnDispatcherAsync(TimeSpan timeout)
+    private static async Task<SelectedContent> CaptureOnDispatcherAsync(
+        TimeSpan timeout,
+        bool useClipboardFallback)
     {
         var backup = CloneClipboard();
         try
         {
+            var fallback = useClipboardFallback
+                ? new SelectedContent(ReadText(), ReadFiles())
+                : SelectedContent.Empty;
             System.Windows.Clipboard.Clear();
             var sequence = NativeMethods.GetClipboardSequenceNumber();
             KeyboardInput.SendCopy();
@@ -34,7 +43,8 @@ public sealed partial class SelectedContentService(Dispatcher dispatcher)
 
             var files = ReadFiles();
             var text = ReadText();
-            return new SelectedContent(text, files);
+            var captured = new SelectedContent(text, files);
+            return captured.HasFiles || captured.HasText ? captured : fallback;
         }
         catch (COMException)
         {
