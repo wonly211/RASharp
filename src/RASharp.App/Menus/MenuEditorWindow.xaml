@@ -7,6 +7,7 @@
         Width="980" Height="680" MinWidth="820" MinHeight="580"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResizeWithGrip"
+        PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp"
         Closing="Window_Closing">
     <Window.Resources>
         <Style x:Key="DragPaletteStyle" TargetType="Border">
@@ -17,6 +18,14 @@
             <Setter Property="Padding" Value="14,7" />
             <Setter Property="Margin" Value="8,0,0,0" />
             <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style x:Key="TreeDragHandleStyle" TargetType="Border">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="SizeAll" />
+            <Setter Property="ToolTip" Value="按住此手柄后拖动" />
         </Style>
     </Window.Resources>
     <Grid Margin="18">
@@ -38,7 +47,7 @@
             <ComboBox x:Name="MenuFileComboBox" Grid.Column="1"
                       SelectionChanged="MenuFileComboBox_SelectionChanged" />
             <TextBlock Grid.Column="2" Margin="14,0" VerticalAlignment="Center"
-                       Text="GUI 保存后，运行中的菜单会自动重新载入。注释、空行、原文件编码和未修改的 DSL 行会保留。"
+                       Text="从节点左侧手柄拖动可调整位置；右键节点可添加、删除或排序。保存后运行中的菜单会自动重新载入。"
                        TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
             <StackPanel Grid.Column="3" Orientation="Horizontal">
                 <Button Content="重新载入" Click="Reload_Click" />
@@ -83,14 +92,37 @@
                 <TreeView x:Name="MenuTreeView" BorderThickness="0" Padding="8"
                           AllowDrop="True"
                           SelectedItemChanged="MenuTreeView_SelectedItemChanged"
-                          PreviewMouseLeftButtonDown="MenuTreeView_PreviewMouseLeftButtonDown"
                           PreviewMouseMove="MenuTreeView_PreviewMouseMove"
+                          PreviewMouseRightButtonDown="MenuTreeView_PreviewMouseRightButtonDown"
                           DragOver="MenuTreeView_DragOver"
                           Drop="MenuTreeView_Drop">
+                    <TreeView.ContextMenu>
+                        <ContextMenu Opened="TreeContextMenu_Opened">
+                            <MenuItem Header="添加">
+                                <MenuItem Header="添加分类" Tag="Category" Click="ContextAdd_Click" />
+                                <MenuItem Header="添加应用（菜单项）" Tag="Entry" Click="ContextAdd_Click" />
+                                <MenuItem Header="添加分隔线" Tag="Separator" Click="ContextAdd_Click" />
+                            </MenuItem>
+                            <Separator />
+                            <MenuItem x:Name="ContextMoveTopMenuItem" Header="置顶" Click="ContextMoveTop_Click" />
+                            <MenuItem x:Name="ContextMoveUpMenuItem" Header="上移" Click="ContextMoveUp_Click" />
+                            <MenuItem x:Name="ContextMoveDownMenuItem" Header="下移" Click="ContextMoveDown_Click" />
+                            <MenuItem x:Name="ContextMoveBottomMenuItem" Header="置底" Click="ContextMoveBottom_Click" />
+                            <Separator />
+                            <MenuItem x:Name="ContextDeleteMenuItem" Header="删除" Click="Delete_Click" />
+                        </ContextMenu>
+                    </TreeView.ContextMenu>
                     <TreeView.Resources>
                         <HierarchicalDataTemplate DataType="{x:Type menus:MenuEditorNode}"
                                                   ItemsSource="{Binding Children}">
-                            <TextBlock Text="{Binding DisplayText}" />
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource TreeDragHandleStyle}"
+                                        PreviewMouseLeftButtonDown="TreeDragHandle_PreviewMouseLeftButtonDown">
+                                    <TextBlock Text="⠿" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource SecondaryTextBrush}" />
+                                </Border>
+                                <TextBlock Text="{Binding DisplayText}" VerticalAlignment="Center" />
+                            </StackPanel>
                         </HierarchicalDataTemplate>
                     </TreeView.Resources>
                 </TreeView>

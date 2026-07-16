@@ -1,0 +1,83 @@
+<Window x:Class="RASharp.App.About.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="关于 RASharp"
+        Icon="/Assets/RASharp.ico"
+        Width="560" Height="470" MinWidth="500" MinHeight="430"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="96" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Image Source="/Assets/RASharp.ico" Width="80" Height="80"
+                           HorizontalAlignment="Left" VerticalAlignment="Top" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="RASharp" FontSize="30" FontWeight="SemiBold" />
+                        <TextBlock x:Name="VersionTextBlock" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                        <TextBlock Text="便携式 Windows 快速启动与 Everything 集成工具"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+
+                <Separator Margin="0,20,0,16" />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="86" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="技术栈" FontWeight="SemiBold" Margin="0,0,0,12" />
+                    <TextBlock Grid.Column="1" Text="C# · .NET 10 · WPF" Margin="0,0,0,12" />
+
+                    <TextBlock Grid.Row="1" Text="项目地址" FontWeight="SemiBold" Margin="0,0,0,12" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,0,0,12">
+                        <Hyperlink NavigateUri="https://github.com/wonly211/RASharp"
+                                   RequestNavigate="Hyperlink_RequestNavigate">
+                            github.com/wonly211/RASharp
+                        </Hyperlink>
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="2" Text="程序目录" FontWeight="SemiBold" Margin="0,0,0,12" />
+                    <TextBox x:Name="ApplicationDirectoryTextBox" Grid.Row="2" Grid.Column="1"
+                             IsReadOnly="True" BorderThickness="0" Padding="0" Margin="0,0,0,12"
+                             Background="Transparent" TextWrapping="Wrap" />
+
+                    <TextBlock Grid.Row="3" Text="配置目录" FontWeight="SemiBold" />
+                    <TextBox x:Name="ConfigurationDirectoryTextBox" Grid.Row="3" Grid.Column="1"
+                             IsReadOnly="True" BorderThickness="0" Padding="0"
+                             Background="Transparent" TextWrapping="Wrap" />
+                </Grid>
+
+                <Border Margin="0,20,0,0" Padding="14"
+                        Background="{DynamicResource ControlBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4">
+                    <TextBlock Text="RASharp 默认将配置、缓存和 Everything 组件保存在程序目录内，不会主动把自身数据写入 AppData。许可和最新发布信息以 GitHub 仓库为准。"
+                               TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="打开 GitHub" Click="OpenGitHub_Click" />
+            <Button Content="关闭" Margin="10,0,0,0" IsDefault="True" IsCancel="True" Click="Close_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

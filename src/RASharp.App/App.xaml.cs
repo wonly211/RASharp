@@ -1,8 +1,8 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Windows;
+using RASharp.App.About;
 using RASharp.Core.Everything;
 using RASharp.Core.Menus;
 using RASharp.Core.Programs;
@@ -32,6 +32,7 @@ public partial class App : System.Windows.Application, IDisposable
     private Forms.ToolStripMenuItem? menu2TrayItem;
     private SettingsWindow? activeSettingsWindow;
     private MenuEditorWindow? activeMenuEditorWindow;
+    private AboutWindow? activeAboutWindow;
     private NativePopupMenuService? popupMenuService;
     private CachedProgramResolver? programResolver;
     private EverythingSearch? everythingSearch;
@@ -465,8 +466,8 @@ public partial class App : System.Windows.Application, IDisposable
         menu.Items.Add("重新加载", null, async (_, _) => await ReloadSafelyAsync().ConfigureAwait(true));
         menu.Items.Add("编辑菜单", null, (_, _) => ShowMenuEditor());
         menu.Items.Add("设置…", null, async (_, _) => await ShowSettingsAsync().ConfigureAwait(true));
-        menu.Items.Add("编辑菜单文件", null, (_, _) => OpenConfigurationFile());
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("关于…", null, (_, _) => ShowAbout());
         menu.Items.Add("退出", null, (_, _) => Shutdown());
 
         applicationIcon = LoadApplicationIcon();
@@ -664,10 +665,23 @@ public partial class App : System.Windows.Application, IDisposable
         window.Show();
     }
 
-    private void OpenConfigurationFile()
+    private void ShowAbout()
     {
-        var path = Path.Combine(configDirectory, "RunAny.ini");
-        _ = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        if (activeAboutWindow is not null)
+        {
+            if (activeAboutWindow.WindowState == WindowState.Minimized)
+            {
+                activeAboutWindow.WindowState = WindowState.Normal;
+            }
+
+            _ = activeAboutWindow.Activate();
+            return;
+        }
+
+        var window = new AboutWindow(applicationDirectory, configDirectory);
+        activeAboutWindow = window;
+        window.Closed += (_, _) => activeAboutWindow = null;
+        window.Show();
     }
 
     private void DisposeRuntimeServices()

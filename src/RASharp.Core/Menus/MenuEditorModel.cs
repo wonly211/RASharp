@@ -267,9 +267,12 @@ public sealed class MenuEditorDocument
         var target = parent?.Children ?? Children;
         node.Parent = parent;
         var insertionIndex = Math.Clamp(index ?? target.Count, 0, target.Count);
-        if (parent is null && node.Kind != MenuEditorNodeKind.Category)
+        if (parent is null)
         {
-            insertionIndex = Math.Min(insertionIndex, GetFirstCategoryIndex(target));
+            var firstCategoryIndex = GetFirstCategoryIndex(target);
+            insertionIndex = node.Kind == MenuEditorNodeKind.Category
+                ? Math.Max(insertionIndex, firstCategoryIndex)
+                : Math.Min(insertionIndex, firstCategoryIndex);
         }
 
         target.Insert(insertionIndex, node);
@@ -295,8 +298,36 @@ public sealed class MenuEditorDocument
         ArgumentNullException.ThrowIfNull(node);
         var siblings = node.Parent?.Children ?? Children;
         var index = siblings.IndexOf(node);
-        var destination = index + offset;
-        if (index < 0 || destination < 0 || destination >= siblings.Count)
+        return index >= 0 && MoveWithinSiblings(node, index + offset);
+    }
+
+    public bool MoveWithinSiblings(MenuEditorNode node, int destinationIndex)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        var siblings = node.Parent?.Children ?? Children;
+        var index = siblings.IndexOf(node);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        var minimumIndex = 0;
+        var maximumIndex = siblings.Count - 1;
+        if (node.Parent is null)
+        {
+            var rootEntryCount = siblings.Count(item => item.Kind != MenuEditorNodeKind.Category);
+            if (node.Kind == MenuEditorNodeKind.Category)
+            {
+                minimumIndex = rootEntryCount;
+            }
+            else
+            {
+                maximumIndex = rootEntryCount - 1;
+            }
+        }
+
+        var destination = Math.Clamp(destinationIndex, minimumIndex, maximumIndex);
+        if (destination == index)
         {
             return false;
         }
@@ -338,9 +369,12 @@ public sealed class MenuEditorDocument
         }
 
         oldSiblings.RemoveAt(oldIndex);
-        if (newParent is null && node.Kind != MenuEditorNodeKind.Category)
+        if (newParent is null)
         {
-            insertionIndex = Math.Min(insertionIndex, GetFirstCategoryIndex(newSiblings));
+            var firstCategoryIndex = GetFirstCategoryIndex(newSiblings);
+            insertionIndex = node.Kind == MenuEditorNodeKind.Category
+                ? Math.Max(insertionIndex, firstCategoryIndex)
+                : Math.Min(insertionIndex, firstCategoryIndex);
         }
 
         insertionIndex = Math.Clamp(insertionIndex, 0, newSiblings.Count);

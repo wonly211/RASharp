@@ -89,6 +89,45 @@ public sealed class MenuEditorModelTests
     }
 
     [Fact]
+    public void MoveWithinSiblingsSupportsBoundariesWithoutBreakingRootDslGroups()
+    {
+        var document = MenuEditorDocument.Parse(
+            "First|first.exe\nSecond|second.exe\n-One\n-Two\n",
+            "RunAny.ini",
+            1);
+        var firstEntry = document.Children[0];
+        var secondEntry = document.Children[1];
+        var firstCategory = document.Children[2];
+        var secondCategory = document.Children[3];
+
+        Assert.True(document.MoveWithinSiblings(secondEntry, 0));
+        Assert.True(document.MoveWithinSiblings(secondCategory, 0));
+        Assert.False(document.MoveWithinSiblings(firstEntry, int.MaxValue));
+        Assert.Equal(
+            "Second|second.exe\nFirst|first.exe\n-Two\n-One\n",
+            document.Serialize());
+        Assert.Equal(["Second", "First", "Two", "One"], document.Children.Select(node => node.Name));
+        Assert.All(document.Children.Take(2), node => Assert.NotEqual(MenuEditorNodeKind.Category, node.Kind));
+        Assert.All(document.Children.Skip(2), node => Assert.Equal(MenuEditorNodeKind.Category, node.Kind));
+        Assert.Same(firstCategory, document.Children[3]);
+    }
+
+    [Fact]
+    public void RootInsertionKeepsApplicationsBeforeCategories()
+    {
+        var document = MenuEditorDocument.Parse("Existing|existing.exe\n-Tools\n", "RunAny.ini", 1);
+        var category = MenuEditorNode.CreateCategory("New category");
+        var entry = MenuEditorNode.CreateEntry("New app", "new.exe");
+
+        document.Add(category, index: 0);
+        document.Add(entry, index: int.MaxValue);
+
+        Assert.Equal(
+            "Existing|existing.exe\nNew app|new.exe\n-New category\n-Tools\n",
+            document.Serialize());
+    }
+
+    [Fact]
     public void ConfigurationFilePreservesLegacyGbkEncodingWhenSaved()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
