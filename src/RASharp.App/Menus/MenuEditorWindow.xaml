@@ -7,6 +7,8 @@
         Width="980" Height="680" MinWidth="820" MinHeight="580"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResizeWithGrip"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        QueryContinueDrag="Window_QueryContinueDrag"
         PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp"
         Closing="Window_Closing">
     <Window.Resources>
@@ -25,7 +27,7 @@
             <Setter Property="CornerRadius" Value="3" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="SizeAll" />
-            <Setter Property="ToolTip" Value="按住此手柄后拖动" />
+            <Setter Property="ToolTip" Value="从此手柄拖动节点" />
         </Style>
     </Window.Resources>
     <Grid Margin="18">
@@ -47,7 +49,7 @@
             <ComboBox x:Name="MenuFileComboBox" Grid.Column="1"
                       SelectionChanged="MenuFileComboBox_SelectionChanged" />
             <TextBlock Grid.Column="2" Margin="14,0" VerticalAlignment="Center"
-                       Text="从节点左侧手柄拖动可调整位置；右键节点可添加、删除或排序。保存后运行中的菜单会自动重新载入。"
+                       Text="可用操作栏、快捷键或拖拽调整菜单；拖拽时会显示准确插入位置。保存后运行中的菜单会自动重新载入。"
                        TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
             <StackPanel Grid.Column="3" Orientation="Horizontal">
                 <Button Content="重新载入" Click="Reload_Click" />
@@ -77,7 +79,6 @@
                     <TextBlock Text="添加分隔线" />
                 </Border>
             </StackPanel>
-            <Button Content="删除所选" HorizontalAlignment="Right" Click="Delete_Click" />
         </Grid>
 
         <Grid Grid.Row="2">
@@ -87,46 +88,73 @@
                 <ColumnDefinition Width="58*" />
             </Grid.ColumnDefinitions>
 
-            <Border Background="{DynamicResource ControlBackgroundBrush}"
-                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3">
-                <TreeView x:Name="MenuTreeView" BorderThickness="0" Padding="8"
-                          AllowDrop="True"
-                          SelectedItemChanged="MenuTreeView_SelectedItemChanged"
-                          PreviewMouseMove="MenuTreeView_PreviewMouseMove"
-                          PreviewMouseRightButtonDown="MenuTreeView_PreviewMouseRightButtonDown"
-                          DragOver="MenuTreeView_DragOver"
-                          Drop="MenuTreeView_Drop">
-                    <TreeView.ContextMenu>
-                        <ContextMenu Opened="TreeContextMenu_Opened">
-                            <MenuItem Header="添加">
-                                <MenuItem Header="添加分类" Tag="Category" Click="ContextAdd_Click" />
-                                <MenuItem Header="添加应用（菜单项）" Tag="Entry" Click="ContextAdd_Click" />
-                                <MenuItem Header="添加分隔线" Tag="Separator" Click="ContextAdd_Click" />
-                            </MenuItem>
-                            <Separator />
-                            <MenuItem x:Name="ContextMoveTopMenuItem" Header="置顶" Click="ContextMoveTop_Click" />
-                            <MenuItem x:Name="ContextMoveUpMenuItem" Header="上移" Click="ContextMoveUp_Click" />
-                            <MenuItem x:Name="ContextMoveDownMenuItem" Header="下移" Click="ContextMoveDown_Click" />
-                            <MenuItem x:Name="ContextMoveBottomMenuItem" Header="置底" Click="ContextMoveBottom_Click" />
-                            <Separator />
-                            <MenuItem x:Name="ContextDeleteMenuItem" Header="删除" Click="Delete_Click" />
-                        </ContextMenu>
-                    </TreeView.ContextMenu>
-                    <TreeView.Resources>
-                        <HierarchicalDataTemplate DataType="{x:Type menus:MenuEditorNode}"
-                                                  ItemsSource="{Binding Children}">
-                            <StackPanel Orientation="Horizontal">
-                                <Border Style="{StaticResource TreeDragHandleStyle}"
-                                        PreviewMouseLeftButtonDown="TreeDragHandle_PreviewMouseLeftButtonDown">
-                                    <TextBlock Text="⠿" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource SecondaryTextBrush}" />
-                                </Border>
-                                <TextBlock Text="{Binding DisplayText}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </HierarchicalDataTemplate>
-                    </TreeView.Resources>
-                </TreeView>
-            </Border>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Background="{DynamicResource ControlBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3">
+                    <TreeView x:Name="MenuTreeView" BorderThickness="0" Padding="8"
+                              AllowDrop="True"
+                              SelectedItemChanged="MenuTreeView_SelectedItemChanged"
+                              PreviewMouseMove="MenuTreeView_PreviewMouseMove"
+                              PreviewMouseRightButtonDown="MenuTreeView_PreviewMouseRightButtonDown"
+                              DragOver="MenuTreeView_DragOver"
+                              DragLeave="MenuTreeView_DragLeave"
+                              Drop="MenuTreeView_Drop">
+                        <TreeView.ContextMenu>
+                            <ContextMenu Opened="TreeContextMenu_Opened">
+                                <MenuItem x:Name="ContextUndoMenuItem" Header="撤销" InputGestureText="Ctrl+Z" Click="Undo_Click" />
+                                <MenuItem x:Name="ContextRedoMenuItem" Header="重做" InputGestureText="Ctrl+Y" Click="Redo_Click" />
+                                <Separator />
+                                <MenuItem Header="添加">
+                                    <MenuItem Header="添加分类" Tag="Category" Click="ContextAdd_Click" />
+                                    <MenuItem Header="添加应用（菜单项）" Tag="Entry" Click="ContextAdd_Click" />
+                                    <MenuItem Header="添加分隔线" Tag="Separator" Click="ContextAdd_Click" />
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem x:Name="ContextMoveTopMenuItem" Header="置顶" InputGestureText="Ctrl+Home" Click="ContextMoveTop_Click" />
+                                <MenuItem x:Name="ContextMoveUpMenuItem" Header="上移" InputGestureText="Alt+↑" Click="ContextMoveUp_Click" />
+                                <MenuItem x:Name="ContextMoveDownMenuItem" Header="下移" InputGestureText="Alt+↓" Click="ContextMoveDown_Click" />
+                                <MenuItem x:Name="ContextMoveBottomMenuItem" Header="置底" InputGestureText="Ctrl+End" Click="ContextMoveBottom_Click" />
+                                <MenuItem x:Name="ContextPromoteMenuItem" Header="提升一级" InputGestureText="Alt+←" Click="Promote_Click" />
+                                <MenuItem x:Name="ContextDemoteMenuItem" Header="降为子级" InputGestureText="Alt+→" Click="Demote_Click" />
+                                <MenuItem x:Name="ContextMoveToMenuItem" Header="移动到分类…" Click="MoveToCategory_Click" />
+                                <Separator />
+                                <MenuItem x:Name="ContextDeleteMenuItem" Header="删除" InputGestureText="Delete" Click="Delete_Click" />
+                            </ContextMenu>
+                        </TreeView.ContextMenu>
+                        <TreeView.Resources>
+                            <HierarchicalDataTemplate DataType="{x:Type menus:MenuEditorNode}"
+                                                      ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Style="{StaticResource TreeDragHandleStyle}"
+                                            PreviewMouseLeftButtonDown="TreeDragHandle_PreviewMouseLeftButtonDown">
+                                        <TextBlock Text="⠿" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    </Border>
+                                    <TextBlock Text="{Binding DisplayText}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.Resources>
+                    </TreeView>
+                </Border>
+
+                <UniformGrid Grid.Row="1" Columns="5" Margin="0,8,0,0">
+                    <Button x:Name="UndoButton" Content="↶ 撤销" Margin="2" ToolTip="Ctrl+Z" Click="Undo_Click" />
+                    <Button x:Name="RedoButton" Content="↷ 重做" Margin="2" ToolTip="Ctrl+Y" Click="Redo_Click" />
+                    <Button x:Name="MoveTopButton" Content="置顶" Margin="2" ToolTip="Ctrl+Home" Click="ContextMoveTop_Click" />
+                    <Button x:Name="MoveUpButton" Content="↑ 上移" Margin="2" ToolTip="Alt+↑" Click="ContextMoveUp_Click" />
+                    <Button x:Name="MoveDownButton" Content="↓ 下移" Margin="2" ToolTip="Alt+↓" Click="ContextMoveDown_Click" />
+                    <Button x:Name="MoveBottomButton" Content="置底" Margin="2" ToolTip="Ctrl+End" Click="ContextMoveBottom_Click" />
+                    <Button x:Name="PromoteButton" Content="← 提升" Margin="2" ToolTip="Alt+←，提升一级" Click="Promote_Click" />
+                    <Button x:Name="DemoteButton" Content="→ 降级" Margin="2" ToolTip="Alt+→，移入前一个分类" Click="Demote_Click" />
+                    <Button x:Name="MoveToButton" Content="移动到…" Margin="2" Click="MoveToCategory_Click" />
+                    <Button x:Name="DeleteButton" Content="删除" Margin="2" ToolTip="Delete" Click="Delete_Click" />
+                </UniformGrid>
+            </Grid>
 
             <Border Grid.Column="2" Background="{DynamicResource CardBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3" Padding="18">

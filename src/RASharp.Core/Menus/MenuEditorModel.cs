@@ -204,6 +204,12 @@ public sealed class MenuEditorNode : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
 
+public sealed record MenuEditorDocumentSnapshot(
+    string Text,
+    string NewLine,
+    bool EndsWithNewLine,
+    bool IsDirty);
+
 public sealed class MenuEditorDocument
 {
     private readonly List<string> trailingLines = [];
@@ -220,9 +226,9 @@ public sealed class MenuEditorDocument
 
     public int MenuNumber { get; }
 
-    public string NewLine { get; }
+    public string NewLine { get; private set; }
 
-    public bool EndsWithNewLine { get; }
+    public bool EndsWithNewLine { get; private set; }
 
     public IList<MenuEditorNode> Children { get; } = new ObservableCollection<MenuEditorNode>();
 
@@ -267,13 +273,10 @@ public sealed class MenuEditorDocument
         var target = parent?.Children ?? Children;
         node.Parent = parent;
         var insertionIndex = Math.Clamp(index ?? target.Count, 0, target.Count);
-        if (parent is null)
-        {
-            var firstCategoryIndex = GetFirstCategoryIndex(target);
-            insertionIndex = node.Kind == MenuEditorNodeKind.Category
-                ? Math.Max(insertionIndex, firstCategoryIndex)
-                : Math.Min(insertionIndex, firstCategoryIndex);
-        }
+        var firstCategoryIndex = GetFirstCategoryIndex(target);
+        insertionIndex = node.Kind == MenuEditorNodeKind.Category
+            ? Math.Max(insertionIndex, firstCategoryIndex)
+            : Math.Min(insertionIndex, firstCategoryIndex);
 
         target.Insert(insertionIndex, node);
         IsDirty = true;
@@ -313,17 +316,14 @@ public sealed class MenuEditorDocument
 
         var minimumIndex = 0;
         var maximumIndex = siblings.Count - 1;
-        if (node.Parent is null)
+        var entryCount = siblings.Count(item => item.Kind != MenuEditorNodeKind.Category);
+        if (node.Kind == MenuEditorNodeKind.Category)
         {
-            var rootEntryCount = siblings.Count(item => item.Kind != MenuEditorNodeKind.Category);
-            if (node.Kind == MenuEditorNodeKind.Category)
-            {
-                minimumIndex = rootEntryCount;
-            }
-            else
-            {
-                maximumIndex = rootEntryCount - 1;
-            }
+            minimumIndex = entryCount;
+        }
+        else
+        {
+            maximumIndex = entryCount - 1;
         }
 
         var destination = Math.Clamp(destinationIndex, minimumIndex, maximumIndex);
@@ -369,15 +369,18 @@ public sealed class MenuEditorDocument
         }
 
         oldSiblings.RemoveAt(oldIndex);
-        if (newParent is null)
-        {
-            var firstCategoryIndex = GetFirstCategoryIndex(newSiblings);
-            insertionIndex = node.Kind == MenuEditorNodeKind.Category
-                ? Math.Max(insertionIndex, firstCategoryIndex)
-                : Math.Min(insertionIndex, firstCategoryIndex);
-        }
+        var firstCategoryIndex = GetFirstCategoryIndex(newSiblings);
+        insertionIndex = node.Kind == MenuEditorNodeKind.Category
+            ? Math.Max(insertionIndex, firstCategoryIndex)
+            : Math.Min(insertionIndex, firstCategoryIndex);
 
         insertionIndex = Math.Clamp(insertionIndex, 0, newSiblings.Count);
+        if (ReferenceEquals(oldSiblings, newSiblings) && insertionIndex == oldIndex)
+        {
+            oldSiblings.Insert(oldIndex, node);
+            return false;
+        }
+
         newSiblings.Insert(insertionIndex, node);
         node.Parent = newParent;
         IsDirty = true;
@@ -389,6 +392,29 @@ public sealed class MenuEditorDocument
         ArgumentNullException.ThrowIfNull(node);
         node.IsModified = true;
         IsDirty = true;
+    }
+
+    public MenuEditorDocumentSnapshot CreateSnapshot() => new(
+        Serialize(),
+        NewLine,
+        EndsWithNewLine,
+        IsDirty);
+
+    public void RestoreSnapshot(MenuEditorDocumentSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var restored = Parse(snapshot.Text, SourcePath, MenuNumber);
+        NewLine = snapshot.NewLine;
+        EndsWithNewLine = snapshot.EndsWithNewLine;
+        Children.Clear();
+        foreach (var node in restored.Children)
+        {
+            Children.Add(node);
+        }
+
+        trailingLines.Clear();
+        trailingLines.AddRange(restored.trailingLines);
+        IsDirty = snapshot.IsDirty;
     }
 
     public string Serialize()

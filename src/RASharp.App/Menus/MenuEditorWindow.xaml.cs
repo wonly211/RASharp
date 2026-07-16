@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using RASharp.Core.Menus;
@@ -20,15 +22,18 @@ public partial class MenuEditorWindow : Window
     private const string PaletteDataFormat = "RASharp.MenuEditor.Palette";
     private const string TreeNodeDataFormat = "RASharp.MenuEditor.TreeNode";
     private const double PaletteDragMinimumDistance = 8;
-    private const double TreeDragMinimumDistance = 12;
-    private static readonly TimeSpan TreeDragHoldDuration = TimeSpan.FromMilliseconds(180);
+    private const double TreeDragMinimumDistance = 7;
+    private static readonly TimeSpan CategoryHoverExpandDelay = TimeSpan.FromMilliseconds(500);
     private readonly Dictionary<string, MenuConfigurationFile> files;
+    private readonly Dictionary<string, MenuEditHistory> histories;
     private MenuConfigurationFile? currentFile;
     private MenuEditorNode? selectedNode;
     private MenuEditorNode? pendingTreeDrag;
     private MenuEditorNodeKind? pendingPaletteDrag;
     private WpfPoint dragStart;
-    private DateTime treeDragPressedAt;
+    private MenuDragAdorner? dragAdorner;
+    private TreeViewItem? hoverExpandContainer;
+    private DateTime hoverExpandStartedAt;
     private bool allowClose;
 
     public MenuEditorWindow(string configDirectory)
@@ -39,6 +44,10 @@ public partial class MenuEditorWindow : Window
             ["RunAny.ini"] = MenuConfigurationFile.Load(Path.Combine(configDirectory, "RunAny.ini"), 1),
             ["RunAny2.ini"] = MenuConfigurationFile.Load(Path.Combine(configDirectory, "RunAny2.ini"), 2),
         };
+        histories = files.Keys.ToDictionary(
+            fileName => fileName,
+            _ => new MenuEditHistory(),
+            StringComparer.OrdinalIgnoreCase);
         MenuFileComboBox.ItemsSource = files.Keys;
         MenuFileComboBox.SelectedIndex = 0;
         SetEditorEnabled(false, false);
@@ -58,6 +67,7 @@ public partial class MenuEditorWindow : Window
         MenuTreeView.ItemsSource = currentFile.Document.Children;
         MenuTreeView.Items.Refresh();
         ClearEditor();
+        UpdateCommandStates();
         StatusTextBlock.Text = currentFile.Exists
             ? currentFile.Path
             : $"{currentFile.Path}（尚未创建，添加内容并保存后创建）";
@@ -69,10 +79,12 @@ public partial class MenuEditorWindow : Window
         if (selectedNode is null)
         {
             ClearEditor();
+            UpdateCommandStates();
             return;
         }
 
         ShowNodeInEditor(selectedNode);
+        UpdateCommandStates();
     }
 
     private void ShowNodeInEditor(MenuEditorNode node)
@@ -117,7 +129,14 @@ public partial class MenuEditorWindow : Window
 
         var data = new WpfDataObject(PaletteDataFormat, pendingPaletteDrag.Value);
         pendingPaletteDrag = null;
-        _ = DragDrop.DoDragDrop((DependencyObject)sender, data, WpfDragDropEffects.Copy);
+        try
+        {
+            _ = DragDrop.DoDragDrop((DependencyObject)sender, data, WpfDragDropEffects.Copy);
+        }
+        finally
+        {
+            ClearDragVisuals();
+        }
     }
 
     private void TreeDragHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -126,7 +145,6 @@ public partial class MenuEditorWindow : Window
             ? node
             : null;
         dragStart = e.GetPosition(this);
-        treeDragPressedAt = DateTime.UtcNow;
         if (FindTreeViewItem(sender as DependencyObject) is { } container)
         {
             container.IsSelected = true;
@@ -145,7 +163,6 @@ public partial class MenuEditorWindow : Window
         }
 
         if (pendingTreeDrag is null
-            || DateTime.UtcNow - treeDragPressedAt < TreeDragHoldDuration
             || !HasExceededDragThreshold(e.GetPosition(this), TreeDragMinimumDistance))
         {
             return;
@@ -153,7 +170,14 @@ public partial class MenuEditorWindow : Window
 
         var data = new WpfDataObject(TreeNodeDataFormat, pendingTreeDrag);
         pendingTreeDrag = null;
-        _ = DragDrop.DoDragDrop(MenuTreeView, data, WpfDragDropEffects.Move);
+        try
+        {
+            _ = DragDrop.DoDragDrop(MenuTreeView, data, WpfDragDropEffects.Move);
+        }
+        finally
+        {
+            ClearDragVisuals();
+        }
     }
 
     private void Window_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -174,25 +198,47 @@ public partial class MenuEditorWindow : Window
         _ = container.Focus();
     }
 
-    private void MenuTreeView_DragOver(object sender, WpfDragEventArgs e)
+    private void Window_QueryContinueDrag(object sender, System.Windows.QueryContinueDragEventArgs e)
     {
-        if (currentFile is null || !TryGetDraggedItem(e.Data, out var draggedNode, out _))
+        if (!e.EscapePressed)
         {
-            e.Effects = WpfDragDropEffects.None;
-            e.Handled = true;
             return;
         }
 
-        var destination = GetDropDestination(e);
+        e.Action = System.Windows.DragAction.Cancel;
+        e.Handled = true;
+        ClearDragVisuals();
+        StatusTextBlock.Text = "已取消拖拽。";
+    }
+
+    private void MenuTreeView_DragOver(object sender, WpfDragEventArgs e)
+    {
+        if (currentFile is null || !TryGetDraggedItem(e.Data, out var draggedNode, out var paletteKind))
+        {
+            e.Effects = WpfDragDropEffects.None;
+            e.Handled = true;
+            ClearDragVisuals();
+            return;
+        }
+
+        var draggedKind = draggedNode?.Kind ?? paletteKind!.Value;
+        var destination = GetDropDestination(e, draggedKind);
+        AutoScrollDuringDrag(e.GetPosition(MenuTreeView));
+        UpdateHoverExpansion(destination);
         if (draggedNode is not null && !CanMoveTo(draggedNode, destination.Parent))
         {
             e.Effects = WpfDragDropEffects.None;
             StatusTextBlock.Text = "不能把分类移动到自身或其子分类中。";
+            RemoveDragAdorner();
         }
         else
         {
             e.Effects = draggedNode is null ? WpfDragDropEffects.Copy : WpfDragDropEffects.Move;
             StatusTextBlock.Text = destination.Description;
+            UpdateDragAdorner(
+                e.GetPosition(MenuTreeView),
+                destination,
+                draggedNode?.DisplayText ?? GetPaletteDisplayText(paletteKind));
         }
 
         e.Handled = true;
@@ -200,17 +246,22 @@ public partial class MenuEditorWindow : Window
 
     private void MenuTreeView_Drop(object sender, WpfDragEventArgs e)
     {
+        ClearDragVisuals();
         if (currentFile is null
             || !TryGetDraggedItem(e.Data, out var draggedNode, out var paletteKind))
         {
             return;
         }
 
-        var destination = GetDropDestination(e);
+        var draggedKind = draggedNode?.Kind ?? paletteKind!.Value;
+        var destination = GetDropDestination(e, draggedKind);
         if (draggedNode is not null)
         {
             if (!CanMoveTo(draggedNode, destination.Parent)
-                || !currentFile.Document.MoveTo(draggedNode, destination.Parent, destination.Index))
+                || !ExecuteMutation(() => currentFile.Document.MoveTo(
+                    draggedNode,
+                    destination.Parent,
+                    destination.Index)))
             {
                 e.Effects = WpfDragDropEffects.None;
                 e.Handled = true;
@@ -218,6 +269,7 @@ public partial class MenuEditorWindow : Window
             }
 
             StatusTextBlock.Text = $"已移动“{draggedNode.Name}”；请保存。";
+            SelectNodeInTree(draggedNode);
         }
         else if (paletteKind is not null)
         {
@@ -227,8 +279,13 @@ public partial class MenuEditorWindow : Window
                 MenuEditorNodeKind.Entry => MenuEditorNode.CreateEntry(),
                 _ => MenuEditorNode.CreateSeparator(),
             };
-            currentFile.Document.Add(newNode, destination.Parent, destination.Index);
+            _ = ExecuteMutation(() =>
+            {
+                currentFile.Document.Add(newNode, destination.Parent, destination.Index);
+                return true;
+            });
             StatusTextBlock.Text = $"已添加“{newNode.DisplayText}”；请保存。";
+            SelectNodeInTree(newNode);
         }
 
         if (destination.InsertInside && destination.Container is not null)
@@ -236,20 +293,25 @@ public partial class MenuEditorWindow : Window
             destination.Container.IsExpanded = true;
         }
 
-        MenuTreeView.Items.Refresh();
+        UpdateCommandStates();
         e.Handled = true;
+    }
+
+    private void MenuTreeView_DragLeave(object sender, WpfDragEventArgs e)
+    {
+        var point = e.GetPosition(MenuTreeView);
+        if (point.X >= 0 && point.X <= MenuTreeView.ActualWidth
+            && point.Y >= 0 && point.Y <= MenuTreeView.ActualHeight)
+        {
+            return;
+        }
+
+        ClearDragVisuals();
     }
 
     private void TreeContextMenu_Opened(object sender, RoutedEventArgs e)
     {
-        var moveRange = selectedNode is null ? null : GetSiblingMoveRange(selectedNode);
-        var canMoveUp = moveRange is not null && moveRange.Index > moveRange.MinimumIndex;
-        var canMoveDown = moveRange is not null && moveRange.Index < moveRange.MaximumIndex;
-        ContextMoveTopMenuItem.IsEnabled = canMoveUp;
-        ContextMoveUpMenuItem.IsEnabled = canMoveUp;
-        ContextMoveDownMenuItem.IsEnabled = canMoveDown;
-        ContextMoveBottomMenuItem.IsEnabled = canMoveDown;
-        ContextDeleteMenuItem.IsEnabled = currentFile is not null && selectedNode is not null;
+        UpdateCommandStates();
         ContextDeleteMenuItem.Header = selectedNode?.Kind switch
         {
             MenuEditorNodeKind.Category => "删除分类",
@@ -275,9 +337,13 @@ public partial class MenuEditorWindow : Window
             MenuEditorNodeKind.Entry => MenuEditorNode.CreateEntry(),
             _ => MenuEditorNode.CreateSeparator(),
         };
-        currentFile.Document.Add(node, parent, index);
-        MenuTreeView.Items.Refresh();
+        _ = ExecuteMutation(() =>
+        {
+            currentFile.Document.Add(node, parent, index);
+            return true;
+        });
         SelectNodeInTree(node);
+        UpdateCommandStates();
         StatusTextBlock.Text = $"已添加“{node.DisplayText}”；请保存。";
     }
 
@@ -304,14 +370,86 @@ public partial class MenuEditorWindow : Window
         var destination = toBoundary
             ? direction < 0 ? moveRange.MinimumIndex : moveRange.MaximumIndex
             : moveRange.Index + direction;
-        if (!currentFile.Document.MoveWithinSiblings(selectedNode, destination))
+        var movingNode = selectedNode;
+        if (!ExecuteMutation(() => currentFile.Document.MoveWithinSiblings(movingNode, destination)))
         {
             return;
         }
 
-        MenuTreeView.Items.Refresh();
-        SelectNodeInTree(selectedNode);
-        StatusTextBlock.Text = $"{status}“{selectedNode.DisplayText}”；请保存。";
+        SelectNodeInTree(movingNode);
+        UpdateCommandStates();
+        StatusTextBlock.Text = $"{status}“{movingNode.DisplayText}”；请保存。";
+    }
+
+    private void Promote_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentFile is null || selectedNode?.Parent is not { } parent)
+        {
+            return;
+        }
+
+        var movingNode = selectedNode;
+        var parentSiblings = parent.Parent?.Children ?? currentFile.Document.Children;
+        var parentIndex = parentSiblings.IndexOf(parent);
+        if (!ExecuteMutation(() => currentFile.Document.MoveTo(
+                movingNode,
+                parent.Parent,
+                parentIndex + 1)))
+        {
+            return;
+        }
+
+        SelectNodeInTree(movingNode);
+        UpdateCommandStates();
+        StatusTextBlock.Text = $"已将“{movingNode.DisplayText}”提升一级；请保存。";
+    }
+
+    private void Demote_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentFile is null || selectedNode is null
+            || GetPreviousSiblingCategory(selectedNode) is not { } targetCategory)
+        {
+            return;
+        }
+
+        var movingNode = selectedNode;
+        if (!ExecuteMutation(() => currentFile.Document.MoveTo(
+                movingNode,
+                targetCategory,
+                targetCategory.Children.Count)))
+        {
+            return;
+        }
+
+        SelectNodeInTree(movingNode);
+        UpdateCommandStates();
+        StatusTextBlock.Text = $"已将“{movingNode.DisplayText}”移入“{targetCategory.Name}”；请保存。";
+    }
+
+    private void MoveToCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (currentFile is null || selectedNode is null)
+        {
+            return;
+        }
+
+        var movingNode = selectedNode;
+        var window = new MoveToCategoryWindow(currentFile.Document, movingNode)
+        {
+            Owner = this,
+        };
+        if (window.ShowDialog() != true
+            || !ExecuteMutation(() => currentFile.Document.MoveTo(
+                movingNode,
+                window.TargetParent,
+                window.TargetIndex)))
+        {
+            return;
+        }
+
+        SelectNodeInTree(movingNode);
+        UpdateCommandStates();
+        StatusTextBlock.Text = $"已移动“{movingNode.DisplayText}”；请保存。";
     }
 
     private (MenuEditorNode? Parent, int Index) GetContextAddDestination()
@@ -347,10 +485,15 @@ public partial class MenuEditorWindow : Window
             return;
         }
 
-        _ = currentFile.Document.Remove(selectedNode);
+        var deletedNode = selectedNode;
+        if (!ExecuteMutation(() => currentFile.Document.Remove(deletedNode)))
+        {
+            return;
+        }
+
         selectedNode = null;
-        MenuTreeView.Items.Refresh();
         ClearEditor();
+        UpdateCommandStates();
         StatusTextBlock.Text = "已删除；请保存。";
     }
 
@@ -382,22 +525,43 @@ public partial class MenuEditorWindow : Window
             return ShowValidationError("全局热键格式无效。", HotKeyTextBox);
         }
 
-        selectedNode.Name = name;
-        selectedNode.HotKey = hotKey;
+        var value = selectedNode.Value;
+        var runAsAdministrator = selectedNode.RunAsAdministrator;
         if (selectedNode.Kind == MenuEditorNodeKind.Entry)
         {
-            var value = ValueTextBox.Text.Trim();
+            value = ValueTextBox.Text.Trim();
             if (value.Length == 0)
             {
                 return ShowValidationError("命令、网址或内容不能为空。", ValueTextBox);
             }
 
-            selectedNode.Value = value;
-            selectedNode.RunAsAdministrator = RunAsAdministratorCheckBox.IsChecked == true;
+            runAsAdministrator = RunAsAdministratorCheckBox.IsChecked == true;
         }
 
-        currentFile.Document.MarkDirty(selectedNode);
-        MenuTreeView.Items.Refresh();
+        var node = selectedNode;
+        var hasChanges = !node.Name.Equals(name, StringComparison.Ordinal)
+            || !node.HotKey.Equals(hotKey, StringComparison.Ordinal)
+            || !node.Value.Equals(value, StringComparison.Ordinal)
+            || node.RunAsAdministrator != runAsAdministrator;
+        if (!hasChanges)
+        {
+            return true;
+        }
+
+        _ = ExecuteMutation(() =>
+        {
+            node.Name = name;
+            node.HotKey = hotKey;
+            if (node.Kind == MenuEditorNodeKind.Entry)
+            {
+                node.Value = value;
+                node.RunAsAdministrator = runAsAdministrator;
+            }
+
+            currentFile.Document.MarkDirty(node);
+            return true;
+        });
+        UpdateCommandStates();
         return true;
     }
 
@@ -416,6 +580,11 @@ public partial class MenuEditorWindow : Window
             foreach (var file in files.Values.Where(file => file.Document.IsDirty))
             {
                 file.Save();
+                if (histories.TryGetValue(Path.GetFileName(file.Path), out var history))
+                {
+                    history.Clear();
+                }
+
                 savedCount++;
             }
 
@@ -425,6 +594,7 @@ public partial class MenuEditorWindow : Window
                 Saved?.Invoke(this, EventArgs.Empty);
             }
 
+            UpdateCommandStates();
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -457,6 +627,7 @@ public partial class MenuEditorWindow : Window
 
         var fileName = Path.GetFileName(currentFile.Path);
         files[fileName] = MenuConfigurationFile.Load(currentFile.Path, currentFile.Document.MenuNumber);
+        histories[fileName] = new MenuEditHistory();
         currentFile = files[fileName];
         MenuTreeView.ItemsSource = currentFile.Document.Children;
         MenuTreeView.Items.Refresh();
@@ -508,6 +679,225 @@ public partial class MenuEditorWindow : Window
         allowClose = true;
     }
 
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
+            or System.Windows.Controls.ComboBox)
+        {
+            return;
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var modifiers = Keyboard.Modifiers;
+        if (modifiers == ModifierKeys.Control && key == Key.Z)
+        {
+            Undo();
+        }
+        else if (modifiers == ModifierKeys.Control && key == Key.Y)
+        {
+            Redo();
+        }
+        else if (modifiers == ModifierKeys.Alt && key == Key.Up)
+        {
+            MoveSelectedNode(toBoundary: false, direction: -1, "已上移");
+        }
+        else if (modifiers == ModifierKeys.Alt && key == Key.Down)
+        {
+            MoveSelectedNode(toBoundary: false, direction: 1, "已下移");
+        }
+        else if (modifiers == ModifierKeys.Alt && key == Key.Left)
+        {
+            Promote_Click(sender, e);
+        }
+        else if (modifiers == ModifierKeys.Alt && key == Key.Right)
+        {
+            Demote_Click(sender, e);
+        }
+        else if (modifiers == ModifierKeys.Control && key == Key.Home)
+        {
+            MoveSelectedNode(toBoundary: true, direction: -1, "已置顶");
+        }
+        else if (modifiers == ModifierKeys.Control && key == Key.End)
+        {
+            MoveSelectedNode(toBoundary: true, direction: 1, "已置底");
+        }
+        else if (modifiers == ModifierKeys.None && key == Key.Delete)
+        {
+            Delete_Click(sender, e);
+        }
+        else
+        {
+            return;
+        }
+
+        e.Handled = true;
+    }
+
+    private void Undo_Click(object sender, RoutedEventArgs e) => Undo();
+
+    private void Redo_Click(object sender, RoutedEventArgs e) => Redo();
+
+    private void Undo()
+    {
+        if (currentFile is null || GetCurrentHistory() is not { UndoCount: > 0 } history)
+        {
+            return;
+        }
+
+        var currentState = CaptureEditorState();
+        var state = history.PopUndo();
+        history.PushRedo(currentState);
+        RestoreEditorState(state);
+        StatusTextBlock.Text = "已撤销上一步操作；请保存。";
+    }
+
+    private void Redo()
+    {
+        if (currentFile is null || GetCurrentHistory() is not { RedoCount: > 0 } history)
+        {
+            return;
+        }
+
+        var currentState = CaptureEditorState();
+        var state = history.PopRedo();
+        history.PushUndo(currentState, clearRedo: false);
+        RestoreEditorState(state);
+        StatusTextBlock.Text = "已重做上一步操作；请保存。";
+    }
+
+    private bool ExecuteMutation(Func<bool> mutation)
+    {
+        if (currentFile is null || GetCurrentHistory() is not { } history)
+        {
+            return false;
+        }
+
+        var before = CaptureEditorState();
+        if (!mutation())
+        {
+            return false;
+        }
+
+        history.PushUndo(before, clearRedo: true);
+        UpdateCommandStates();
+        return true;
+    }
+
+    private EditorState CaptureEditorState() => new(
+        currentFile!.Document.CreateSnapshot(),
+        GetNodePath(selectedNode));
+
+    private void RestoreEditorState(EditorState state)
+    {
+        if (currentFile is null)
+        {
+            return;
+        }
+
+        selectedNode = null;
+        ClearEditor();
+        currentFile.Document.RestoreSnapshot(state.Snapshot);
+        MenuTreeView.ItemsSource = currentFile.Document.Children;
+        MenuTreeView.UpdateLayout();
+        var restoredSelection = FindNodeByPath(state.SelectedPath);
+        if (restoredSelection is not null)
+        {
+            SelectNodeInTree(restoredSelection);
+        }
+
+        UpdateCommandStates();
+    }
+
+    private MenuEditHistory? GetCurrentHistory()
+    {
+        if (currentFile is null)
+        {
+            return null;
+        }
+
+        return histories.GetValueOrDefault(Path.GetFileName(currentFile.Path));
+    }
+
+    private int[]? GetNodePath(MenuEditorNode? node)
+    {
+        if (currentFile is null || node is null)
+        {
+            return null;
+        }
+
+        var indices = new Stack<int>();
+        for (var current = node; current is not null; current = current.Parent)
+        {
+            var siblings = current.Parent?.Children ?? currentFile.Document.Children;
+            var index = siblings.IndexOf(current);
+            if (index < 0)
+            {
+                return null;
+            }
+
+            indices.Push(index);
+        }
+
+        return indices.ToArray();
+    }
+
+    private MenuEditorNode? FindNodeByPath(int[]? path)
+    {
+        if (currentFile is null || path is null || path.Length == 0)
+        {
+            return null;
+        }
+
+        IList<MenuEditorNode> children = currentFile.Document.Children;
+        MenuEditorNode? node = null;
+        foreach (var index in path)
+        {
+            if (index < 0 || index >= children.Count)
+            {
+                return null;
+            }
+
+            node = children[index];
+            children = node.Children;
+        }
+
+        return node;
+    }
+
+    private void UpdateCommandStates()
+    {
+        var moveRange = selectedNode is null ? null : GetSiblingMoveRange(selectedNode);
+        var canMoveUp = moveRange is not null && moveRange.Index > moveRange.MinimumIndex;
+        var canMoveDown = moveRange is not null && moveRange.Index < moveRange.MaximumIndex;
+        var canPromote = selectedNode?.Parent is not null;
+        var canDemote = selectedNode is not null && GetPreviousSiblingCategory(selectedNode) is not null;
+        var hasSelection = currentFile is not null && selectedNode is not null;
+        var history = GetCurrentHistory();
+        var canUndo = history?.UndoCount > 0;
+        var canRedo = history?.RedoCount > 0;
+
+        UndoButton.IsEnabled = canUndo;
+        RedoButton.IsEnabled = canRedo;
+        ContextUndoMenuItem.IsEnabled = canUndo;
+        ContextRedoMenuItem.IsEnabled = canRedo;
+        MoveTopButton.IsEnabled = canMoveUp;
+        MoveUpButton.IsEnabled = canMoveUp;
+        ContextMoveTopMenuItem.IsEnabled = canMoveUp;
+        ContextMoveUpMenuItem.IsEnabled = canMoveUp;
+        MoveDownButton.IsEnabled = canMoveDown;
+        MoveBottomButton.IsEnabled = canMoveDown;
+        ContextMoveDownMenuItem.IsEnabled = canMoveDown;
+        ContextMoveBottomMenuItem.IsEnabled = canMoveDown;
+        PromoteButton.IsEnabled = canPromote;
+        ContextPromoteMenuItem.IsEnabled = canPromote;
+        DemoteButton.IsEnabled = canDemote;
+        ContextDemoteMenuItem.IsEnabled = canDemote;
+        MoveToButton.IsEnabled = hasSelection;
+        ContextMoveToMenuItem.IsEnabled = hasSelection;
+        DeleteButton.IsEnabled = hasSelection;
+        ContextDeleteMenuItem.IsEnabled = hasSelection;
+    }
+
     private void ClearEditor()
     {
         NodeTypeTextBlock.Text = "请选择左侧节点";
@@ -535,6 +925,24 @@ public partial class MenuEditorWindow : Window
 
     private void SelectNodeInTree(MenuEditorNode node)
     {
+        var container = FindTreeViewItemForNode(node, expandAncestors: true);
+        if (container is null)
+        {
+            selectedNode = node;
+            ShowNodeInEditor(node);
+            UpdateCommandStates();
+            return;
+        }
+
+        container.IsSelected = true;
+        _ = container.Focus();
+        container.BringIntoView();
+    }
+
+    private TreeViewItem? FindTreeViewItemForNode(
+        MenuEditorNode node,
+        bool expandAncestors = false)
+    {
         var path = new Stack<MenuEditorNode>();
         for (var current = node; current is not null; current = current.Parent)
         {
@@ -549,25 +957,23 @@ public partial class MenuEditorWindow : Window
             container = owner.ItemContainerGenerator.ContainerFromItem(pathNode) as TreeViewItem;
             if (container is null)
             {
-                selectedNode = node;
-                ShowNodeInEditor(node);
-                return;
+                return null;
             }
 
             if (path.Count > 0)
             {
+                if (!container.IsExpanded && !expandAncestors)
+                {
+                    return null;
+                }
+
                 container.IsExpanded = true;
                 container.UpdateLayout();
                 owner = container;
             }
         }
 
-        if (container is not null)
-        {
-            container.IsSelected = true;
-            _ = container.Focus();
-            container.BringIntoView();
-        }
+        return container;
     }
 
     private SiblingMoveRange? GetSiblingMoveRange(MenuEditorNode node)
@@ -586,59 +992,268 @@ public partial class MenuEditorWindow : Window
 
         var minimumIndex = 0;
         var maximumIndex = siblings.Count - 1;
-        if (node.Parent is null)
+        var entryCount = siblings.Count(item => item.Kind != MenuEditorNodeKind.Category);
+        if (node.Kind == MenuEditorNodeKind.Category)
         {
-            var rootEntryCount = siblings.Count(item => item.Kind != MenuEditorNodeKind.Category);
-            if (node.Kind == MenuEditorNodeKind.Category)
-            {
-                minimumIndex = rootEntryCount;
-            }
-            else
-            {
-                maximumIndex = rootEntryCount - 1;
-            }
+            minimumIndex = entryCount;
+        }
+        else
+        {
+            maximumIndex = entryCount - 1;
         }
 
         return new SiblingMoveRange(index, minimumIndex, maximumIndex);
     }
 
-    private DropDestination GetDropDestination(WpfDragEventArgs e)
+    private DropDestination GetDropDestination(WpfDragEventArgs e, MenuEditorNodeKind draggedKind)
     {
         var container = FindTreeViewItem(e.OriginalSource as DependencyObject);
         if (container?.DataContext is not MenuEditorNode target || currentFile is null)
         {
-            return new DropDestination(
+            return NormalizeDropDestination(new DropDestination(
                 null,
                 currentFile?.Document.Children.Count ?? 0,
                 "放到菜单根级末尾",
                 null,
-                false);
+                null,
+                false,
+                MenuDropVisualKind.Root), draggedKind);
         }
 
-        var point = e.GetPosition(container);
+        var header = GetTreeViewItemHeader(container);
+        var point = e.GetPosition(header);
+        var headerHeight = Math.Max(1, header.ActualHeight);
         var insertInside = target.Kind == MenuEditorNodeKind.Category
-            && point.Y >= container.ActualHeight * 0.25
-            && point.Y <= container.ActualHeight * 0.75;
+            && point.Y >= headerHeight * 0.30
+            && point.Y <= headerHeight * 0.70;
         if (insertInside)
         {
-            return new DropDestination(
+            return NormalizeDropDestination(new DropDestination(
                 target,
                 target.Children.Count,
                 $"放入分类“{target.Name}”",
                 container,
-                true);
+                header,
+                true,
+                MenuDropVisualKind.Inside), draggedKind);
         }
 
         var siblings = target.Parent?.Children ?? currentFile.Document.Children;
         var targetIndex = siblings.IndexOf(target);
-        var insertAfter = point.Y > container.ActualHeight / 2;
-        return new DropDestination(
+        var insertAfter = point.Y > headerHeight / 2;
+        return NormalizeDropDestination(new DropDestination(
             target.Parent,
             targetIndex + (insertAfter ? 1 : 0),
             $"放到“{target.DisplayText}”{(insertAfter ? "之后" : "之前")}",
             container,
-            false);
+            header,
+            false,
+            insertAfter ? MenuDropVisualKind.After : MenuDropVisualKind.Before), draggedKind);
     }
+
+    private DropDestination NormalizeDropDestination(
+        DropDestination destination,
+        MenuEditorNodeKind draggedKind)
+    {
+        if (currentFile is null || destination.InsertInside)
+        {
+            return destination;
+        }
+
+        var siblings = destination.Parent?.Children ?? currentFile.Document.Children;
+        var firstCategoryIndex = siblings
+            .TakeWhile(node => node.Kind != MenuEditorNodeKind.Category)
+            .Count();
+        var normalizedIndex = draggedKind == MenuEditorNodeKind.Category
+            ? Math.Max(destination.Index, firstCategoryIndex)
+            : Math.Min(destination.Index, firstCategoryIndex);
+        normalizedIndex = Math.Clamp(normalizedIndex, 0, siblings.Count);
+        if (normalizedIndex == destination.Index)
+        {
+            return destination;
+        }
+
+        var groupName = draggedKind == MenuEditorNodeKind.Category ? "分类区" : "应用区";
+        if (siblings.Count == 0)
+        {
+            return destination with { Index = normalizedIndex, Description = $"放到当前层级的{groupName}" };
+        }
+
+        var boundaryNode = normalizedIndex < siblings.Count
+            ? siblings[normalizedIndex]
+            : siblings[^1];
+        var boundaryContainer = FindTreeViewItemForNode(boundaryNode);
+        var boundaryHeader = boundaryContainer is null ? null : GetTreeViewItemHeader(boundaryContainer);
+        return destination with
+        {
+            Index = normalizedIndex,
+            Description = $"放到当前层级的{groupName}",
+            Container = boundaryContainer,
+            HeaderElement = boundaryHeader,
+            VisualKind = normalizedIndex < siblings.Count
+                ? MenuDropVisualKind.Before
+                : MenuDropVisualKind.After,
+        };
+    }
+
+    private void UpdateDragAdorner(
+        WpfPoint cursor,
+        DropDestination destination,
+        string previewText)
+    {
+        var layer = AdornerLayer.GetAdornerLayer(MenuTreeView);
+        if (layer is null)
+        {
+            return;
+        }
+
+        if (dragAdorner is null)
+        {
+            dragAdorner = new MenuDragAdorner(MenuTreeView);
+            layer.Add(dragAdorner);
+        }
+
+        var bounds = destination.HeaderElement is null
+            ? new Rect(
+                8,
+                Math.Max(8, MenuTreeView.ActualHeight - 12),
+                Math.Max(40, MenuTreeView.ActualWidth - 24),
+                0)
+            : GetElementBounds(destination.HeaderElement);
+        dragAdorner.Update(cursor, bounds, destination.VisualKind, previewText);
+    }
+
+    private Rect GetElementBounds(FrameworkElement element)
+    {
+        try
+        {
+            var topLeft = element.TransformToAncestor(MenuTreeView).Transform(new WpfPoint(0, 0));
+            return new Rect(
+                topLeft.X,
+                topLeft.Y,
+                Math.Max(element.ActualWidth, MenuTreeView.ActualWidth - topLeft.X - 14),
+                Math.Max(1, element.ActualHeight));
+        }
+        catch (InvalidOperationException)
+        {
+            return new Rect(8, 8, Math.Max(40, MenuTreeView.ActualWidth - 24), 1);
+        }
+    }
+
+    private void AutoScrollDuringDrag(WpfPoint point)
+    {
+        var scrollViewer = FindVisualChild<ScrollViewer>(MenuTreeView);
+        if (scrollViewer is null)
+        {
+            return;
+        }
+
+        const double edge = 36;
+        const double step = 14;
+        if (point.Y < edge)
+        {
+            scrollViewer.ScrollToVerticalOffset(Math.Max(0, scrollViewer.VerticalOffset - step));
+        }
+        else if (point.Y > MenuTreeView.ActualHeight - edge)
+        {
+            scrollViewer.ScrollToVerticalOffset(
+                Math.Min(scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset + step));
+        }
+    }
+
+    private void UpdateHoverExpansion(DropDestination destination)
+    {
+        var candidate = destination.InsertInside
+            && destination.Container is { IsExpanded: false }
+            ? destination.Container
+            : null;
+        if (!ReferenceEquals(candidate, hoverExpandContainer))
+        {
+            hoverExpandContainer = candidate;
+            hoverExpandStartedAt = DateTime.UtcNow;
+            return;
+        }
+
+        if (candidate is not null
+            && DateTime.UtcNow - hoverExpandStartedAt >= CategoryHoverExpandDelay)
+        {
+            candidate.IsExpanded = true;
+            candidate.UpdateLayout();
+            hoverExpandContainer = null;
+        }
+    }
+
+    private void ClearDragVisuals()
+    {
+        RemoveDragAdorner();
+        hoverExpandContainer = null;
+    }
+
+    private void RemoveDragAdorner()
+    {
+        if (dragAdorner is null)
+        {
+            return;
+        }
+
+        AdornerLayer.GetAdornerLayer(MenuTreeView)?.Remove(dragAdorner);
+        dragAdorner = null;
+    }
+
+    private static FrameworkElement GetTreeViewItemHeader(TreeViewItem container)
+    {
+        container.ApplyTemplate();
+        if (container.Template.FindName("PART_Header", container) is FrameworkElement header)
+        {
+            return header;
+        }
+
+        return FindVisualChild<ContentPresenter>(container) is { } presenter
+            ? presenter
+            : container;
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T result)
+            {
+                return result;
+            }
+
+            if (FindVisualChild<T>(child) is { } descendant)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
+    }
+
+    private MenuEditorNode? GetPreviousSiblingCategory(MenuEditorNode node)
+    {
+        if (currentFile is null)
+        {
+            return null;
+        }
+
+        var siblings = node.Parent?.Children ?? currentFile.Document.Children;
+        var index = siblings.IndexOf(node);
+        return index > 0 && siblings[index - 1].Kind == MenuEditorNodeKind.Category
+            ? siblings[index - 1]
+            : null;
+    }
+
+    private static string GetPaletteDisplayText(MenuEditorNodeKind? kind) => kind switch
+    {
+        MenuEditorNodeKind.Category => "新分类",
+        MenuEditorNodeKind.Entry => "新应用（菜单项）",
+        MenuEditorNodeKind.Separator => "新分隔线",
+        _ => "新节点",
+    };
 
     private static bool TryGetDraggedItem(
         System.Windows.IDataObject data,
@@ -667,9 +1282,6 @@ public partial class MenuEditorWindow : Window
 
         return true;
     }
-
-    private static MenuEditorNode? FindTreeNode(DependencyObject? source) =>
-        FindTreeViewItem(source)?.DataContext as MenuEditorNode;
 
     private static TreeViewItem? FindTreeViewItem(DependencyObject? source)
     {
@@ -700,7 +1312,64 @@ public partial class MenuEditorWindow : Window
         int Index,
         string Description,
         TreeViewItem? Container,
-        bool InsertInside);
+        FrameworkElement? HeaderElement,
+        bool InsertInside,
+        MenuDropVisualKind VisualKind);
 
     private sealed record SiblingMoveRange(int Index, int MinimumIndex, int MaximumIndex);
+
+    private sealed record EditorState(MenuEditorDocumentSnapshot Snapshot, int[]? SelectedPath);
+
+    private sealed class MenuEditHistory
+    {
+        private const int MaximumEntries = 100;
+        private readonly List<EditorState> undo = [];
+        private readonly List<EditorState> redo = [];
+
+        public int UndoCount => undo.Count;
+
+        public int RedoCount => redo.Count;
+
+        public void PushUndo(EditorState state, bool clearRedo = true)
+        {
+            undo.Add(state);
+            Trim(undo);
+            if (clearRedo)
+            {
+                redo.Clear();
+            }
+        }
+
+        public void PushRedo(EditorState state)
+        {
+            redo.Add(state);
+            Trim(redo);
+        }
+
+        public EditorState PopUndo() => Pop(undo);
+
+        public EditorState PopRedo() => Pop(redo);
+
+        public void Clear()
+        {
+            undo.Clear();
+            redo.Clear();
+        }
+
+        private static EditorState Pop(List<EditorState> states)
+        {
+            var index = states.Count - 1;
+            var state = states[index];
+            states.RemoveAt(index);
+            return state;
+        }
+
+        private static void Trim(List<EditorState> states)
+        {
+            if (states.Count > MaximumEntries)
+            {
+                states.RemoveAt(0);
+            }
+        }
+    }
 }

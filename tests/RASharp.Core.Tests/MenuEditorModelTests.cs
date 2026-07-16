@@ -128,6 +128,55 @@ public sealed class MenuEditorModelTests
     }
 
     [Fact]
+    public void NestedInsertionKeepsApplicationsBeforeChildCategories()
+    {
+        var document = MenuEditorDocument.Parse(
+            "-Parent\nExisting|existing.exe\n--Child\nChild app|child.exe\n",
+            "RunAny.ini",
+            1);
+        var parent = Assert.Single(document.Children);
+        var childCategory = parent.Children[1];
+        document.Add(MenuEditorNode.CreateEntry("New app", "new.exe"), parent, int.MaxValue);
+
+        Assert.False(document.MoveWithinSiblings(childCategory, 0));
+        Assert.Equal(
+            "-Parent\nExisting|existing.exe\nNew app|new.exe\n--Child\nChild app|child.exe\n",
+            document.Serialize());
+    }
+
+    [Fact]
+    public void SnapshotRestoresTreeContentAndDirtyState()
+    {
+        var document = MenuEditorDocument.Parse("-Tools\nFirst|first.exe\n", "RunAny.ini", 1);
+        var cleanSnapshot = document.CreateSnapshot();
+        var category = Assert.Single(document.Children);
+        document.Add(MenuEditorNode.CreateEntry("Second", "second.exe"), category);
+        var dirtySnapshot = document.CreateSnapshot();
+
+        document.RestoreSnapshot(cleanSnapshot);
+
+        Assert.False(document.IsDirty);
+        Assert.Equal("-Tools\nFirst|first.exe\n", document.Serialize());
+
+        document.RestoreSnapshot(dirtySnapshot);
+
+        Assert.True(document.IsDirty);
+        Assert.Equal("-Tools\nFirst|first.exe\nSecond|second.exe\n", document.Serialize());
+    }
+
+    [Fact]
+    public void MoveToSamePositionDoesNotCreateAChange()
+    {
+        var document = MenuEditorDocument.Parse("-Tools\nFirst|first.exe\n", "RunAny.ini", 1);
+        var category = Assert.Single(document.Children);
+        var entry = Assert.Single(category.Children);
+
+        Assert.False(document.MoveTo(entry, category, 0));
+        Assert.False(document.IsDirty);
+        Assert.Equal("-Tools\nFirst|first.exe\n", document.Serialize());
+    }
+
+    [Fact]
     public void ConfigurationFilePreservesLegacyGbkEncodingWhenSaved()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
