@@ -1,6 +1,8 @@
 # RASharp
 
-RASharp 是 RunAny 核心能力的 C#/.NET 10 + WPF 重构版本。目前聚焦以下功能：
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
+RASharp 是一款独立开发的 C#/.NET 10 + WPF Windows 快速启动工具，兼容 `RunAny.ini` 和 `RunAny2.ini` 菜单 DSL，但不包含或依赖 RunAny 源代码。目前聚焦以下功能：
 
 当前版本：[v0.1.5](https://github.com/wonly211/RASharp/releases/tag/v0.1.5)
 
@@ -97,6 +99,14 @@ dotnet publish src/RASharp.App/RASharp.App.csproj -c Release -r win-x64 --self-c
 ```
 
 当前版本只实现热字符串最核心的立即触发 `*` 与结束字符触发语义；尚未覆盖 AHK 热字符串的全部高级选项。分类选择器已经进入模型，但尚未根据选中文件扩展名隐藏菜单分类。
+
+## 许可
+
+Copyright (C) 2026 wonly211。
+
+RASharp 自有源代码按照 [GNU General Public License v3.0 only](LICENSE) 发布。分发修改版或衍生版本时，必须遵守 GPLv3 的源代码提供及同许可证分发要求。
+
+Everything SDK、.NET 和 WPF 等组件保留各自的版权与许可，详见 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)。
 
 ## 项目结构
 

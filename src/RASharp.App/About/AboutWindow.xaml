@@ -42,6 +42,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <TextBlock Text="技术栈" FontWeight="SemiBold" Margin="0,0,0,12" />
@@ -62,14 +63,27 @@
 
                     <TextBlock Grid.Row="3" Text="配置目录" FontWeight="SemiBold" />
                     <TextBox x:Name="ConfigurationDirectoryTextBox" Grid.Row="3" Grid.Column="1"
-                             IsReadOnly="True" BorderThickness="0" Padding="0"
+                             IsReadOnly="True" BorderThickness="0" Padding="0" Margin="0,0,0,12"
                              Background="Transparent" TextWrapping="Wrap" />
+
+                    <TextBlock Grid.Row="4" Text="软件许可" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" TextWrapping="Wrap">
+                        <Hyperlink NavigateUri="https://github.com/wonly211/RASharp/blob/main/LICENSE"
+                                   RequestNavigate="Hyperlink_RequestNavigate">
+                            GPL-3.0-only
+                        </Hyperlink>
+                        <Run Text=" · " />
+                        <Hyperlink NavigateUri="https://github.com/wonly211/RASharp/blob/main/THIRD-PARTY-NOTICES.txt"
+                                   RequestNavigate="Hyperlink_RequestNavigate">
+                            第三方许可声明
+                        </Hyperlink>
+                    </TextBlock>
                 </Grid>
 
                 <Border Margin="0,20,0,0" Padding="14"
                         Background="{DynamicResource ControlBackgroundBrush}"
                         BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="4">
-                    <TextBlock Text="RASharp 默认将配置、缓存和 Everything 组件保存在程序目录内，不会主动把自身数据写入 AppData。许可和最新发布信息以 GitHub 仓库为准。"
+                    <TextBlock Text="RASharp 默认将配置、缓存和 Everything 组件保存在程序目录内，不会主动把自身数据写入 AppData。项目采用 GPL-3.0-only；第三方组件保留各自许可。"
                                TextWrapping="Wrap" />
                 </Border>
             </StackPanel>
